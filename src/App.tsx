@@ -13,7 +13,7 @@ import { FileBrowserModal } from './components/FileBrowserModal';
 import { DiagnosticsModal } from './components/DiagnosticsModal';
 import { SettingsModal } from './components/SettingsModal';
 import { AboutModal } from './components/AboutModal';
-import { MediaProbe, RenderOptions, PairingResult, planSegments } from './utils/engine';
+import { MediaProbe, RenderOptions, PairingResult } from './utils/engine';
 import { Play, X } from 'lucide-react';
 
 const API = '';
@@ -118,6 +118,31 @@ export default function App() {
     }
   };
 
+  // Spawn payload row sent to the backend queue
+  const buildQueuePayload = (
+    audio: MediaProbe,
+    video: MediaProbe,
+    outputName: string,
+    mode: 'copy' | 'encode',
+    modeReason: string,
+  ) => ({
+    audio_path: audio.path,
+    video_path: video.path,
+    output_path: `${outputFolder.replace(/[\\/]+$/, '')}/${outputName}`,
+    mode,
+    mode_reason: modeReason,
+    duration: audio.duration,
+    options: { ...renderOptions },
+  });
+
+  const postQueueCommand = (path: string, body?: Record<string, unknown>) => {
+    fetch(`${API}/api/v1/queue/${path}`, {
+      method: 'POST',
+      headers: body ? { 'Content-Type': 'application/json' } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+    }).catch(() => undefined);
+  };
+
   const handleAddSingleToQueue = (jobData: {
     audio: MediaProbe;
     video: MediaProbe;
@@ -126,111 +151,96 @@ export default function App() {
     mode: 'copy' | 'encode';
     modeReason: string;
   }) => {
-    const segments = planSegments(jobData.audio.duration, segmentDuration);
-    const newJob: RenderJob = {
-      id: `job_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-      audioName: jobData.audio.filename,
-      videoName: jobData.video.filename,
-      outputName: jobData.outputName,
-      duration: jobData.audio.duration,
-      mode: jobData.mode,
-      modeReason: jobData.modeReason,
-      status: 'queued',
-      progress: 0,
-      fps: 0,
-      speed: '-',
-      etaSeconds: Math.round(jobData.audio.duration / 3),
-      currentSegment: 1,
-      totalSegments: Math.max(1, segments.length),
-      logs: [
-        `[info] Queued job for ${jobData.outputName}`,
-        `[info] Mode: ${jobData.mode.toUpperCase()} - ${jobData.modeReason}`,
-        `[info] Planned ${segments.length} segment(s) of max ${segmentDuration}s for crash-safe recovery.`,
-      ],
-    };
-    setJobs(prev => [...prev, newJob]);
-    fetch(`${API}/api/v1/queue/start`, { method: 'POST' }).catch(() => undefined);
+    const payload = buildQueuePayload(
+      jobData.audio, jobData.video, jobData.outputName, jobData.mode, jobData.modeReason,
+    );
+    fetch(`${API}/api/v1/queue/add`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jobs: [payload] }),
+    }).catch(() => undefined);
     setActiveTab('queue');
   };
 
   const handleQueueBatch = (pairings: PairingResult[]) => {
-    const newJobs: RenderJob[] = pairings.map((p, idx) => {
-      const segments = planSegments(p.audio.duration, segmentDuration);
-      return {
-        id: `batch_job_${Date.now()}_${idx}`,
-        audioName: p.audio.filename,
-        videoName: p.video.filename,
-        outputName: p.outputName,
-        duration: p.audio.duration,
-        mode: p.mode,
-        modeReason: p.modeReason,
-        status: 'queued',
-        progress: 0,
-        fps: 0,
-        speed: '-',
-        etaSeconds: Math.round(p.audio.duration / 3),
-        currentSegment: 1,
-        totalSegments: Math.max(1, segments.length),
-        logs: [
-          `[info] Queued from bulk plan (${p.loopCount}x loops).`,
-          `[info] Mode: ${p.mode.toUpperCase()} - ${p.modeReason}`,
-        ],
-      };
-    });
-    setJobs(prev => [...prev, ...newJobs]);
-    fetch(`${API}/api/v1/queue/start`, { method: 'POST' }).catch(() => undefined);
+    const payload = pairings.map(p =>
+      buildQueuePayload(p.audio, p.video, p.outputName, p.mode, p.modeReason),
+    );
+    fetch(`${API}/api/v1/queue/add`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jobs: payload }),
+    }).catch(() => undefined);
     setActiveTab('queue');
   };
 
-  const handleStartAll = () => {
-    setJobs(prev => {
-      const firstQueued = prev.findIndex(j => j.status === 'queued');
-      if (firstQueued === -1) return prev;
-      return prev.map((j, i) => (i === firstQueued ? { ...j, status: 'rendering' } : j));
-    });
-  };
+  // Queue state live-syncs from the backend worker
+  useEffect(() => {
+    let stopped = false;
+    const sync = async () => {
+      try {
+        const res = await fetch(`${API}/api/v1/queue`);
+        if (!res.ok) return;
+        const data = (await res.json()) as Array<Record<string, unknown>>;
+        if (stopped) return;
+        const mapped: RenderJob[] = data.map(j => {
+          const audioPath = String(j.audioPath || '');
+          const videoPath = String(j.videoPath || '');
+          const outputPath = String(j.outputPath || '');
+          return {
+            id: String(j.id),
+            audioName: audioPath.split(/[\\/]/).pop() || audioPath,
+            videoName: videoPath.split(/[\\/]/).pop() || videoPath,
+            outputName: outputPath.split(/[\\/]/).pop() || outputPath,
+            duration: Number(j.duration) || 0,
+            mode: j.mode === 'encode' ? 'encode' : 'copy',
+            modeReason: String(j.modeReason || ''),
+            status: String(j.status) as RenderJob['status'],
+            progress: Number(j.progress) || 0,
+            fps: Number(j.fps) || 0,
+            speed: String(j.speed || '-'),
+            etaSeconds: Number(j.etaSeconds) || 0,
+            currentSegment: Number(j.currentSegment) || 1,
+            totalSegments: Number(j.totalSegments) || 1,
+            logs: Array.isArray(j.logs) ? (j.logs as string[]) : [],
+          };
+        });
+        setJobs(prev => (JSON.stringify(prev) === JSON.stringify(mapped) ? prev : mapped));
+      } catch {
+        /* server may be closed between renders */
+      }
+    };
+    sync();
+    const timer = window.setInterval(sync, 1500);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, []);
 
-  const handlePauseAll = () => {
-    setJobs(prev => prev.map(j => (j.status === 'rendering' ? { ...j, status: 'paused' } : j)));
-  };
+  const handleStartAll = () => postQueueCommand('start');
 
-  const handleResumeAll = () => {
-    setJobs(prev => prev.map(j => (j.status === 'paused' ? { ...j, status: 'rendering' } : j)));
-  };
+  const handlePauseAll = () => postQueueCommand('pause');
 
-  const handleStopAfterCurrent = () => {
-    // Current rendering finishes, next jobs stay queued
-  };
+  const handleResumeAll = () => postQueueCommand('resume');
 
-  const handleClearCompleted = () => {
-    setJobs(prev => prev.filter(j => j.status !== 'completed'));
-  };
+  const handleStopAfterCurrent = () => postQueueCommand('stop-after-current');
 
-  const handlePauseJob = (id: string) => {
-    setJobs(prev => prev.map(j => (j.id === id ? { ...j, status: 'paused' } : j)));
-  };
+  const handleClearCompleted = () => postQueueCommand('clear-completed');
 
-  const handleResumeJob = (id: string) => {
-    setJobs(prev => prev.map(j => (j.id === id ? { ...j, status: 'rendering' } : j)));
-  };
+  const handlePauseJob = (id: string) =>
+    postQueueCommand(`jobs/${id}/pause`);
+
+  const handleResumeJob = (id: string) =>
+    postQueueCommand(`jobs/${id}/resume`);
 
   const handleCancelJob = (id: string) => {
-    setJobs(prev => prev.filter(j => j.id !== id));
+    fetch(`${API}/api/v1/queue/jobs/${id}`, { method: 'DELETE' })
+      .catch(() => undefined);
   };
 
-  const handleMoveJob = (id: string, direction: 'up' | 'down') => {
-    setJobs(prev => {
-      const idx = prev.findIndex(j => j.id === id);
-      if (idx === -1) return prev;
-      const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
-      if (targetIdx < 0 || targetIdx >= prev.length) return prev;
-      const copy = [...prev];
-      const temp = copy[idx];
-      copy[idx] = copy[targetIdx];
-      copy[targetIdx] = temp;
-      return copy;
-    });
-  };
+  const handleMoveJob = (id: string, direction: 'up' | 'down') =>
+    postQueueCommand(`jobs/${id}/move`, { direction });
 
   const handleOpenOutputFolder = (outputName: string) => {
     alert(`Output file location:\n${outputFolder}/${outputName}`);

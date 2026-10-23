@@ -5,6 +5,10 @@ Localhost-only binding with CSRF origin protection and `/api/v1` routes.
 
 import os
 import string
+import subprocess
+import threading
+import time
+import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, HTTPException, Request, Response
@@ -16,6 +20,7 @@ from pydantic import BaseModel
 from mistus_av_merger import __version__, VERSION_CODE
 from mistus_av_merger.config import SettingsManager, get_app_root, is_portable_mode
 from mistus_av_merger.core._build_info import BUILD_INFO
+from mistus_av_merger.core.ffmpeg_builder import FFmpegCommandBuilder
 from mistus_av_merger.core.hwdetect import HardwareDetector
 from mistus_av_merger.core.jobs import JobQueueManager, RenderJob
 from mistus_av_merger.core.pairing import AutoPairingEngine
@@ -42,11 +47,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+def _resolve_ffmpeg() -> str:
+    try:
+        from mistus_av_merger.core.hwdetect import get_ffmpeg_binary
+        return get_ffmpeg_binary()
+    except Exception:
+        return "ffmpeg"
+
+
 settings_mgr = SettingsManager()
 hw_detector = HardwareDetector()
 scanner = MediaScanner()
 preset_mgr = PresetManager()
 queue_mgr = JobQueueManager()
+queue_mgr.load_session()
+
+ffmpeg_builder = FFmpegCommandBuilder(ffmpeg_bin=_resolve_ffmpeg())
+_active_job: Optional[RenderJob] = None
+_active_lock = threading.Lock()
+_encoder_cache: Optional[str] = None
+_encoder_lock = threading.Lock()
 
 
 # Host header origin validation middleware
@@ -322,17 +342,298 @@ def list_queue():
     return [j.to_dict() for j in queue_mgr.jobs]
 
 
+# ---------------- Real Render Worker ----------------
+
+_MP4_SAFE_AUDIO_EXTS = {".aac", ".mp3", ".m4a", ".ac3"}
+_DIRTY_AUDIO_EXTS = {".flac", ".wav", ".wma", ".ogg", ".opus", ".aiff", ".aif", ".mka"}
+
+
+def _needs_audio_transcode(audio_path: Path, output_path: Path) -> bool:
+    """MP4-family containers only accept a subset of audio codecs losslessly."""
+    if Path(output_path).suffix.lower() == ".mkv":
+        return False
+    return Path(audio_path).suffix.lower() in _DIRTY_AUDIO_EXTS
+
+
+def _pick_encoder() -> str:
+    """Resolves the best available (hardware-first)VIDEO encoder once."""
+    global _encoder_cache
+    with _encoder_lock:
+        if _encoder_cache is None:
+            try:
+                det = HardwareDetector()
+                det.probe_all()
+                _encoder_cache = det.recommended_encoder
+            except Exception:
+                _encoder_cache = "libx264"
+        return _encoder_cache
+
+
+def _pick_probe_duration(path: Path) -> Optional[float]:
+    try:
+        result = scanner.probe_file(path)
+        return result.duration if result else None
+    except Exception:
+        return None
+
+
+class QueueAddRequest(BaseModel):
+    jobs: List[Dict[str, Any]]
+
+
+@app.post("/api/v1/queue/add")
+def add_jobs(req: QueueAddRequest):
+    added = []
+    for raw in req.jobs:
+        audio_path = Path(str(raw.get("audio_path", "")))
+        video_path = Path(str(raw.get("video_path", "")))
+        output_path = Path(str(raw.get("output_path", "")))
+        if not audio_path.exists():
+            raise HTTPException(status_code=400, detail=f"Audio file not found: {audio_path}")
+        if not video_path.exists():
+            raise HTTPException(status_code=400, detail=f"Video file not found: {video_path}")
+
+        try:
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            raise HTTPException(status_code=400, detail=f"Cannot create output folder: {e}")
+
+        mode = str(raw.get("mode") or "copy")
+        options = dict(raw.get("options") or {})
+        audio_dur = raw.get("duration")
+        if not audio_dur:
+            probed = _pick_probe_duration(audio_path)
+            audio_dur = probed or 0.0
+        video_dur = _pick_probe_duration(video_path) or 0.0
+
+        job = RenderJob(
+            job_id=f"job_{uuid.uuid4().hex[:12]}",
+            audio_path=str(audio_path),
+            video_path=str(video_path),
+            output_path=str(output_path),
+            mode=mode,
+            mode_reason=str(raw.get("mode_reason") or ""),
+            duration=float(audio_dur),
+            options={**options, "video_duration_sec": video_dur},
+        )
+        job.total_segments = 1
+        queue_mgr.add_job(job)
+        added.append(job.to_dict())
+
+    if added and not queue_mgr.is_running:
+        queue_mgr.is_running = True
+
+    return {"added": added, "queue": [j.to_dict() for j in queue_mgr.jobs]}
+
+
+def _execute_job(job: RenderJob):
+    """Runs one render end-to-end, streaming ffmpeg's progress into the job."""
+    global _active_job
+    output = Path(job.output_path)
+    audio = Path(job.audio_path)
+    video = Path(job.video_path)
+    opts = job.options or {}
+    command: List[str] = []
+
+    try:
+        if job.mode == "encode":
+            preset = preset_mgr.get_preset(str(opts.get("vhsPreset") or "none"))
+            filtergraph = preset["filtergraph"] if preset else ""
+            noise_static = bool(opts.get("noiseStaticEnabled"))
+            command = ffmpeg_builder.build_reencode_render(
+                video_path=video,
+                audio_path=audio,
+                output_path=output,
+                encoder=str(opts.get("encoder") or _pick_encoder()),
+                resolution=str(opts.get("resolution") or "original"),
+                filtergraph=filtergraph,
+                night_mode=bool(opts.get("nightModeEnabled")),
+                night_intensity=float(opts.get("nightIntensity", 0.7)),
+                noise_static=noise_static,
+                noise_seed=int(opts.get("noiseSeed") or 1994),
+                overlay_path=Path(str(opts.get("overlayPath"))) if opts.get("overlayPath") else None,
+                overlay_opacity=float(opts.get("overlayOpacity", 0.8)),
+                duration_sec=job.duration or None,
+                threads=int(opts.get("threads") or 0) or None,
+            )
+        else:
+            video_dur = float(opts.get("video_duration_sec") or 0.0)
+            command = ffmpeg_builder.build_stream_copy_loop(
+                video_path=video,
+                audio_path=audio,
+                output_path=output,
+                audio_transcode=_needs_audio_transcode(audio, output),
+                audio_duration_sec=job.duration or None,
+                video_duration_sec=video_dur or None,
+            )
+
+        job.status = "rendering"
+        job.logs.append(f"[cmd] {' '.join(command[:1])} ... (loop render: {job.audio_path})")
+        queue_mgr.save_session()
+
+        creationflags = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
+        proc = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            creationflags=creationflags,
+        )
+        queue_mgr.apply_cpu_profile(proc)
+        job.process = proc
+        with _active_lock:
+            _active_job = job
+
+        for line in proc.stdout:
+            line = line.strip()
+            if not line:
+                continue
+            if "=" in line:
+                key, _, value = line.partition("=")
+                if key in ("out_time_ms", "out_time_us") and job.duration > 0:
+                    try:
+                        micros = int(value)
+                        if micros > 0:
+                            done = min(100.0, (micros / 1_000_000.0) / job.duration * 100.0)
+                            job.progress = round(done, 1)
+                            if job.speed:
+                                try:
+                                    mult = float(job.speed.rstrip("x"))
+                                    if mult > 0.05:
+                                        job.eta_seconds = int(max(0, (job.duration - micros / 1_000_000.0) / mult))
+                                except ValueError:
+                                    pass
+                    except ValueError:
+                        pass
+                elif key == "fps":
+                    try:
+                        job.fps = round(float(value), 1)
+                    except ValueError:
+                        pass
+                elif key == "speed":
+                    job.speed = value
+                elif line.startswith("progress="):
+                    continue
+            elif len(line) > 60:
+                job.logs.append(line)
+
+        rc = proc.wait()
+        if rc == 0 and output.exists():
+            job.status = "completed"
+            job.progress = 100.0
+            job.speed = "-"
+            job.eta_seconds = 0
+        else:
+            job.status = "failed"
+            job.logs.append(f"[error] ffmpeg exited with code {rc}")
+    except Exception as exc:  # defensive: a bad job must not kill the worker
+        job.status = "failed"
+        job.logs.append(f"[error] {exc}")
+    finally:
+        job.process = None
+        with _active_lock:
+            if _active_job is job:
+                _active_job = None
+        queue_mgr.save_session()
+
+
+def _render_worker_loop():
+    while True:
+        if not queue_mgr.is_running or queue_mgr.is_paused:
+            time.sleep(0.25)
+            continue
+        job = next((j for j in queue_mgr.jobs if j.status == "queued"), None)
+        if job is None:
+            time.sleep(0.25)
+            continue
+        _execute_job(job)
+
+
+threading.Thread(target=_render_worker_loop, name="render-worker", daemon=True).start()
+
+
 @app.post("/api/v1/queue/start")
 def start_queue():
     queue_mgr.is_running = True
     queue_mgr.is_paused = False
-    return {"status": "started"}
+    for job in queue_mgr.jobs:
+        if job.status == "paused":
+            queue_mgr.resume_job(job.job_id)
+    return {"status": "started", "queue": [j.to_dict() for j in queue_mgr.jobs]}
 
 
 @app.post("/api/v1/queue/pause")
 def pause_queue():
     queue_mgr.is_paused = True
-    return {"status": "paused"}
+    for job in queue_mgr.jobs:
+        if job.status == "rendering":
+            queue_mgr.pause_job(job.job_id)
+    return {"status": "paused", "queue": [j.to_dict() for j in queue_mgr.jobs]}
+
+
+@app.post("/api/v1/queue/resume")
+def resume_queue():
+    queue_mgr.is_paused = False
+    for job in queue_mgr.jobs:
+        if job.status == "paused":
+            queue_mgr.resume_job(job.job_id)
+    return {"status": "resumed", "queue": [j.to_dict() for j in queue_mgr.jobs]}
+
+
+@app.post("/api/v1/queue/stop-after-current")
+def stop_after_current():
+    """Lets the in-flight render finish, then stops starting new jobs."""
+    queue_mgr.is_running = False
+    return {"status": "stopping_after_current"}
+
+
+@app.post("/api/v1/queue/clear-completed")
+def clear_completed_jobs():
+    queue_mgr.jobs = [j for j in queue_mgr.jobs if j.status not in ("completed", "failed")]
+    queue_mgr.save_session()
+    return {"status": "cleared", "queue": [j.to_dict() for j in queue_mgr.jobs]}
+
+
+class JobMoveRequest(BaseModel):
+    direction: str = "up"
+
+
+@app.delete("/api/v1/queue/jobs/{job_id}")
+def remove_job(job_id: str):
+    job = next((j for j in queue_mgr.jobs if j.job_id == job_id), None)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.process:
+        try:
+            import psutil as _psutil
+            p = _psutil.Process(job.process.pid)
+            if job.status == "paused":
+                p.resume()
+            p.terminate()
+        except Exception:
+            pass
+    queue_mgr.remove_job(job_id)
+    return {"status": "removed", "queue": [j.to_dict() for j in queue_mgr.jobs]}
+
+
+@app.post("/api/v1/queue/jobs/{job_id}/pause")
+def pause_single_job(job_id: str):
+    queue_mgr.pause_job(job_id)
+    return {"status": "paused", "queue": [j.to_dict() for j in queue_mgr.jobs]}
+
+
+@app.post("/api/v1/queue/jobs/{job_id}/resume")
+def resume_single_job(job_id: str):
+    queue_mgr.resume_job(job_id)
+    return {"status": "resumed", "queue": [j.to_dict() for j in queue_mgr.jobs]}
+
+
+@app.post("/api/v1/queue/jobs/{job_id}/move")
+def move_single_job(job_id: str, req: JobMoveRequest):
+    queue_mgr.move_job(job_id, req.direction)
+    return {"status": "moved", "queue": [j.to_dict() for j in queue_mgr.jobs]}
 
 
 @app.post("/api/v1/system/shutdown")

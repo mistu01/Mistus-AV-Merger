@@ -85,6 +85,32 @@ def test_build_stream_copy_loop_single_play_shorter_than_audio():
     assert cmd[idx_loop + 1] == "2"
 
 
+def test_build_reencode_render_clamps_output_duration():
+    """Explicit duration replaces -shortest so FFmpeg 8/9 cannot overshoot."""
+    builder = FFmpegCommandBuilder(ffmpeg_bin="ffmpeg")
+    cmd = builder.build_reencode_render(
+        video_path=Path("/media/clip.mp4"),
+        audio_path=Path("/media/song.mp3"),
+        output_path=Path("/renders/output.mp4"),
+        encoder="libx264",
+        duration_sec=6.0,
+    )
+    idx_t = cmd.index("-t")
+    assert cmd[idx_t + 1] == "6.000"
+    assert "-shortest" not in cmd
+
+
+def test_build_reencode_render_without_duration_keeps_shortest():
+    builder = FFmpegCommandBuilder(ffmpeg_bin="ffmpeg")
+    cmd = builder.build_reencode_render(
+        video_path=Path("/media/clip.mp4"),
+        audio_path=Path("/media/song.mp3"),
+        output_path=Path("/renders/output.mp4"),
+        encoder="libx264",
+    )
+    assert "-shortest" in cmd
+
+
 def test_build_reencode_render_with_filters():
     builder = FFmpegCommandBuilder(ffmpeg_bin="ffmpeg")
     cmd = builder.build_reencode_render(
