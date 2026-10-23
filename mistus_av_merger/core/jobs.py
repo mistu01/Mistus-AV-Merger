@@ -42,6 +42,7 @@ class RenderJob:
         self.options = options
 
         self.status: str = "queued"  # queued, rendering, paused, completed, failed
+        self.encoder: str = "-"
         self.progress: float = 0.0
         self.fps: float = 0.0
         self.speed: str = "0.0x"
@@ -61,6 +62,7 @@ class RenderJob:
             "modeReason": self.mode_reason,
             "duration": self.duration,
             "status": self.status,
+            "encoder": self.encoder,
             "progress": self.progress,
             "fps": self.fps,
             "speed": self.speed,

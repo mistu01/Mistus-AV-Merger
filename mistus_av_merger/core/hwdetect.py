@@ -52,24 +52,30 @@ class HardwareDetector:
         self.gpu_brand: str = "CPU (Software)"
 
     def probe_all(self) -> Dict[str, bool]:
-        """Probes all potential hardware and software encoders."""
+        """Probes all potential hardware and software encoders.
+
+        NOTE: encoders are probed PLAIN (no -hwaccel input flag). Hardware
+        *encoding* does not require -hwaccel, and placing that flag after the
+        input (as a stray output option) makes ffmpeg fail option parsing —
+        which silently disabled every GPU encoder in the past.
+        """
         candidates = [
-            ("h264_nvenc", ["-hwaccel", "cuda"]),
-            ("hevc_nvenc", ["-hwaccel", "cuda"]),
-            ("h264_qsv", ["-hwaccel", "qsv"]),
-            ("hevc_qsv", ["-hwaccel", "qsv"]),
-            ("h264_amf", []),
-            ("hevc_amf", []),
-            ("h264_videotoolbox", []),
-            ("hevc_videotoolbox", []),
-            ("h264_vaapi", ["-vaapi_device", "/dev/dri/renderD128"]),
-            ("libx264", []),
-            ("libx265", []),
+            "h264_nvenc",
+            "hevc_nvenc",
+            "h264_qsv",
+            "hevc_qsv",
+            "h264_amf",
+            "hevc_amf",
+            "h264_videotoolbox",
+            "hevc_videotoolbox",
+            "h264_vaapi",
+            "libx264",
+            "libx265",
         ]
 
         results = {}
-        for enc, extra in candidates:
-            success = probe_encoder_actual(enc, extra if extra else None)
+        for enc in candidates:
+            success = probe_encoder_actual(enc)
             results[enc] = success
 
         self.available_encoders = results

@@ -527,7 +527,6 @@ def _execute_job(job: RenderJob):
     audio = Path(job.audio_path)
     video = Path(job.video_path)
     opts = job.options or {}
-    command: List[str] = []
 
     try:
         job_threads = int(opts.get("threads") or 0) or queue_mgr.threads_for_profile()
@@ -535,22 +534,40 @@ def _execute_job(job: RenderJob):
             preset = preset_mgr.get_preset(str(opts.get("vhsPreset") or "none"))
             filtergraph = preset["filtergraph"] if preset else ""
             noise_static = bool(opts.get("noiseStaticEnabled"))
-            command = ffmpeg_builder.build_reencode_render(
-                video_path=video,
-                audio_path=audio,
-                output_path=output,
-                encoder=str(opts.get("encoder") or _pick_encoder()),
-                resolution=str(opts.get("resolution") or "original"),
-                filtergraph=filtergraph,
-                night_mode=bool(opts.get("nightModeEnabled")),
-                night_intensity=float(opts.get("nightIntensity", 0.7)),
-                noise_static=noise_static,
-                noise_seed=int(opts.get("noiseSeed") or 1994),
-                overlay_path=Path(str(opts.get("overlayPath"))) if opts.get("overlayPath") else None,
-                overlay_opacity=float(opts.get("overlayOpacity", 0.8)),
-                duration_sec=job.duration or None,
-                threads=job_threads,
-            )
+
+            def _build_encode_command(encoder: str) -> List[str]:
+                return ffmpeg_builder.build_reencode_render(
+                    video_path=video,
+                    audio_path=audio,
+                    output_path=output,
+                    encoder=encoder,
+                    resolution=str(opts.get("resolution") or "original"),
+                    filtergraph=filtergraph,
+                    night_mode=bool(opts.get("nightModeEnabled")),
+                    night_intensity=float(opts.get("nightIntensity", 0.7)),
+                    noise_static=noise_static,
+                    noise_seed=int(opts.get("noiseSeed") or 1994),
+                    overlay_path=Path(str(opts.get("overlayPath"))) if opts.get("overlayPath") else None,
+                    overlay_opacity=float(opts.get("overlayOpacity", 0.8)),
+                    duration_sec=job.duration or None,
+                    threads=job_threads,
+                )
+
+            encoder = str(opts.get("encoder") or _pick_encoder())
+            command = _build_encode_command(encoder)
+            fallbacks = 0
+            while True:
+                job.encoder = encoder
+                _run_render_process(job, command)
+                if job.status == "completed":
+                    break
+                sw = _sw_fallback_encoder(encoder)
+                if sw is None or fallbacks >= 1:
+                    break
+                job.logs.append(f"[warn] {encoder} failed; retrying with {sw}")
+                encoder = sw
+                command = _build_encode_command(encoder)
+                fallbacks += 1
         else:
             video_dur = float(opts.get("video_duration_sec") or 0.0)
             command = ffmpeg_builder.build_stream_copy_loop(
@@ -562,68 +579,7 @@ def _execute_job(job: RenderJob):
                 video_duration_sec=video_dur or None,
                 threads=job_threads,
             )
-
-        job.status = "rendering"
-        job.logs.append(f"[cmd] {' '.join(command[:1])} ... (loop render: {job.audio_path})")
-        queue_mgr.save_session()
-
-        creationflags = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
-        proc = subprocess.Popen(
-            command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            creationflags=creationflags,
-        )
-        queue_mgr.apply_cpu_profile(proc)
-        job.process = proc
-        with _active_lock:
-            _active_job = job
-
-        for line in proc.stdout:
-            line = line.strip()
-            if not line:
-                continue
-            if "=" in line:
-                key, _, value = line.partition("=")
-                if key in ("out_time_ms", "out_time_us") and job.duration > 0:
-                    try:
-                        micros = int(value)
-                        if micros > 0:
-                            done = min(100.0, (micros / 1_000_000.0) / job.duration * 100.0)
-                            job.progress = round(done, 1)
-                            if job.speed:
-                                try:
-                                    mult = float(job.speed.rstrip("x"))
-                                    if mult > 0.05:
-                                        job.eta_seconds = int(max(0, (job.duration - micros / 1_000_000.0) / mult))
-                                except ValueError:
-                                    pass
-                    except ValueError:
-                        pass
-                elif key == "fps":
-                    try:
-                        job.fps = round(float(value), 1)
-                    except ValueError:
-                        pass
-                elif key == "speed":
-                    job.speed = value
-                elif line.startswith("progress="):
-                    continue
-            elif len(line) > 60:
-                job.logs.append(line)
-
-        rc = proc.wait()
-        if rc == 0 and output.exists():
-            job.status = "completed"
-            job.progress = 100.0
-            job.speed = "-"
-            job.eta_seconds = 0
-        else:
-            job.status = "failed"
-            job.logs.append(f"[error] ffmpeg exited with code {rc}")
+            _run_render_process(job, command)
     except Exception as exc:  # defensive: a bad job must not kill the worker
         job.status = "failed"
         job.logs.append(f"[error] {exc}")
@@ -633,6 +589,84 @@ def _execute_job(job: RenderJob):
             if _active_job is job:
                 _active_job = None
         queue_mgr.save_session()
+
+
+def _sw_fallback_encoder(encoder: str) -> Optional[str]:
+    """Software encoder to retry with when a hardware encoder fails."""
+    if encoder.startswith("h264_"):
+        return "libx264"
+    if encoder.startswith("hevc_"):
+        return "libx264"
+    return None
+
+
+def _run_render_process(job: RenderJob, command: List[str]):
+    """Launches ffmpeg, streams progress into the job, sets the final status."""
+    global _active_job
+    output = Path(job.output_path)
+
+    job.status = "rendering"
+    job.progress = 0.0
+    job.logs.append(f"[cmd] {Path(command[0]).name} ({job.encoder}) render: {Path(job.audio_path).name}")
+    queue_mgr.save_session()
+
+    creationflags = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
+    proc = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        creationflags=creationflags,
+    )
+    queue_mgr.apply_cpu_profile(proc)
+    job.process = proc
+    with _active_lock:
+        _active_job = job
+
+    for line in proc.stdout:
+        line = line.strip()
+        if not line:
+            continue
+        if "=" in line:
+            key, _, value = line.partition("=")
+            if key in ("out_time_ms", "out_time_us") and job.duration > 0:
+                try:
+                    micros = int(value)
+                    if micros > 0:
+                        done = min(100.0, (micros / 1_000_000.0) / job.duration * 100.0)
+                        job.progress = round(done, 1)
+                        if job.speed:
+                            try:
+                                mult = float(job.speed.rstrip("x"))
+                                if mult > 0.05:
+                                    job.eta_seconds = int(max(0, (job.duration - micros / 1_000_000.0) / mult))
+                            except ValueError:
+                                pass
+                except ValueError:
+                    pass
+            elif key == "fps":
+                try:
+                    job.fps = round(float(value), 1)
+                except ValueError:
+                    pass
+            elif key == "speed":
+                job.speed = value
+            elif line.startswith("progress="):
+                continue
+        else:
+            job.logs.append(line)
+
+    rc = proc.wait()
+    if rc == 0 and output.exists():
+        job.status = "completed"
+        job.progress = 100.0
+        job.speed = "-"
+        job.eta_seconds = 0
+    else:
+        job.status = "failed"
+        job.logs.append(f"[error] ffmpeg exited with code {rc}")
 
 
 def _render_worker_loop():

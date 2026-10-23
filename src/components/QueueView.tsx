@@ -27,6 +27,7 @@ export interface RenderJob {
   duration: number;
   mode: 'copy' | 'encode';
   modeReason: string;
+  encoder?: string;
   status: 'queued' | 'rendering' | 'paused' | 'completed' | 'failed';
   progress: number;
   fps: number;
@@ -200,7 +201,13 @@ export const QueueView: React.FC<QueueViewProps> = ({
                     {job.mode === 'copy' ? (
                       <span className="nb-badge nb-badge-lime"><Zap className="w-3 h-3" /> Copy</span>
                     ) : (
-                      <span className="nb-badge nb-badge-yellow"><Layers className="w-3 h-3" /> Encode</span>
+                      <span
+                        className="nb-badge nb-badge-yellow"
+                        title={job.encoder ? `Rendered with: ${job.encoder}` : undefined}
+                      >
+                        <Layers className="w-3 h-3" />
+                        Encode{job.encoder && job.encoder !== '-' ? ` · ${job.encoder}` : ''}
+                      </span>
                     )}
 
                     {job.status === 'rendering' && (

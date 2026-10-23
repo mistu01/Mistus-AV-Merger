@@ -45,7 +45,8 @@ class FFmpegCommandBuilder:
                 self.ffmpeg_bin,
                 "-y",
                 "-hide_banner",
-                "-loglevel", "info",
+                "-loglevel", "error",
+                "-nostdin",
                 "-fflags", "+genpts",
                 "-stream_loop", str(loop_count - 1),
                 "-i", str(video_path),
@@ -57,7 +58,8 @@ class FFmpegCommandBuilder:
                 self.ffmpeg_bin,
                 "-y",
                 "-hide_banner",
-                "-loglevel", "info",
+                "-loglevel", "error",
+                "-nostdin",
                 "-stream_loop", "-1",
                 "-i", str(video_path),
                 "-i", str(audio_path),
@@ -83,6 +85,12 @@ class FFmpegCommandBuilder:
             str(output_path)
         ])
         return cmd
+
+    # Fast encoder presets: quality-tuned defaults light enough to hit
+    # multiple-x realtime on modest CPUs. veryfast keeps quality close to
+    # medium at ~3x the speed; hardware encoders have their own scales.
+    _X264_PRESET = "veryfast"
+    _QSV_PRESET = "veryfast"
 
     def build_reencode_render(
         self,
@@ -111,7 +119,10 @@ class FFmpegCommandBuilder:
             self.ffmpeg_bin,
             "-y",
             "-hide_banner",
-            "-loglevel", "info",
+            # error keeps queue logs clean (ffprobe banner soup wastes cycles
+            # and clutters job logs); failures still surface fully.
+            "-loglevel", "error",
+            "-nostdin",
             "-stream_loop", "-1",
             "-i", str(video_path),
             "-i", str(audio_path),
@@ -179,11 +190,13 @@ class FFmpegCommandBuilder:
         if "nvenc" in encoder:
             cmd.extend(["-cq", str(crf), "-preset", "p4"])
         elif "qsv" in encoder:
-            cmd.extend(["-global_quality", str(crf), "-preset", "medium"])
+            cmd.extend(["-global_quality", str(crf), "-preset", self._QSV_PRESET])
         elif "videotoolbox" in encoder:
             cmd.extend(["-q:v", str(crf * 3)])
+        elif "libx265" in encoder:
+            cmd.extend(["-crf", str(crf + 3), "-preset", "fast"])
         else:
-            cmd.extend(["-crf", str(crf), "-preset", "medium"])
+            cmd.extend(["-crf", str(crf), "-preset", self._X264_PRESET])
 
         # Audio encode to AAC
         cmd.extend(["-c:a", "aac", "-b:a", "192k"])

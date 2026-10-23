@@ -270,6 +270,7 @@ export default function App() {
             duration: Number(j.duration) || 0,
             mode: j.mode === 'encode' ? 'encode' : 'copy',
             modeReason: String(j.modeReason || ''),
+            encoder: String(j.encoder || ''),
             status: String(j.status) as RenderJob['status'],
             progress: Number(j.progress) || 0,
             fps: Number(j.fps) || 0,
