@@ -4,12 +4,12 @@ Regenerate with: python scripts/gen_build_info.py --help
 """
 
 BUILD_INFO = {
-    "version": "0.6.1",
-    "version_code": 601,
+    "version": "0.6.2",
+    "version_code": 602,
     "prerelease": None,
     "git_commit": "dev",
     "git_ref": "main",
-    "build_date_utc": "2026-10-23T19:03:31Z",
+    "build_date_utc": "2026-10-23T19:37:26Z",
     "target_os": "dev",
     "target_arch": "dev",
     "ffmpeg_version": "bundled",

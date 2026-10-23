@@ -15,6 +15,23 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ---
 
+## [0.6.2] - 2026-10-24
+
+### Added
+- feat(api): real filesystem browsing endpoints — `GET /api/v1/fs/list` lists the actual drives, user shortcuts (Home / Desktop / Downloads / Music / Videos / Documents) and folder contents of the host computer; `POST /api/v1/fs/probe` ffprobes a single picked media file for the UI.
+- feat(ui): the file picker now browses your real computer — the previous browser rendered hardcoded mock paths and could not reach any real folder.
+- feat(ui): output folder selector in the Bulk Auto-Pair view ("Rendered Videos Go To"), with a real `{home}/MistusRenders` default filled from the server.
+- feat(ui): bulk scan is wired to the real backend scan endpoint (`POST /api/v1/scan`) instead of a fake timer.
+
+### Changed
+- feat(ui): full neobrutalist redesign of the entire interface — thick black borders, hard offset shadows, saturated color blocks, chunky uppercase headings, press-in buttons and animated marquee stripe; applied to the Single, Bulk Auto-Pair, Queue, FX Studio, Settings, About, Diagnostics and file picker views.
+- feat(ui): bulk auto-pairing is now simple by default: "1 clip for every audio track — each clip loops until its audio finishes" (`order_1_to_1`). The other pairing modes moved into a collapsed Advanced section.
+- feat(ui): the job queue starts genuinely empty; demo placeholder jobs and the simulated progress ticker are gone.
+- feat(ui): Diagnostics now reports live server data (version, build info, hardware accelerators) instead of hardcoded numbers.
+- fix(ui): stale page title "v0.5.0" replaced with "Mistus AV Merger".
+
+---
+
 ## [0.6.1] - 2026-10-24
 
 ### Fixed
