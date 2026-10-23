@@ -176,3 +176,57 @@ def test_build_reencode_render_missing_overlay_skips_composition(tmp_path):
     )
     assert "-filter_complex" not in cmd
     assert "-vf" in cmd
+
+
+def test_build_reencode_render_bitrate_cap_x264():
+    """Bitrate cap swaps CRF for ABR args and tiers the audio bitrate."""
+    builder = FFmpegCommandBuilder(ffmpeg_bin="ffmpeg")
+    cmd = builder.build_reencode_render(
+        video_path=Path("/media/clip.mp4"),
+        audio_path=Path("/media/song.mp3"),
+        output_path=Path("/renders/output.mp4"),
+        encoder="libx264",
+        bitrate_kbps=620,
+        audio_bitrate_kbps=160,
+    )
+    idx_bv = cmd.index("-b:v")
+    assert cmd[idx_bv + 1] == "620k"
+    idx_mr = cmd.index("-maxrate")
+    assert cmd[idx_mr + 1] == "1240k"
+    idx_bs = cmd.index("-bufsize")
+    assert cmd[idx_bs + 1] == "2480k"
+    assert "-crf" not in cmd
+    idx_ba = cmd.index("-b:a")
+    assert cmd[idx_ba + 1] == "160k"
+
+
+def test_build_reencode_render_bitrate_cap_qsv_keeps_preset():
+    builder = FFmpegCommandBuilder(ffmpeg_bin="ffmpeg")
+    cmd = builder.build_reencode_render(
+        video_path=Path("/media/clip.mp4"),
+        audio_path=Path("/media/song.mp3"),
+        output_path=Path("/renders/output.mp4"),
+        encoder="h264_qsv",
+        bitrate_kbps=547,
+        audio_bitrate_kbps=128,
+    )
+    assert cmd[cmd.index("-b:v") + 1] == "547k"
+    assert "-global_quality" not in cmd
+    assert cmd[cmd.index("-preset") + 1] == builder._QSV_PRESET
+    assert cmd[cmd.index("-b:a") + 1] == "128k"
+
+
+def test_build_reencode_render_bitrate_cap_nvenc_drops_cq():
+    builder = FFmpegCommandBuilder(ffmpeg_bin="ffmpeg")
+    cmd = builder.build_reencode_render(
+        video_path=Path("/media/clip.mp4"),
+        audio_path=Path("/media/song.mp3"),
+        output_path=Path("/renders/output.mp4"),
+        encoder="h264_nvenc",
+        bitrate_kbps=400,
+    )
+    assert "-cq" not in cmd
+    assert cmd[cmd.index("-preset") + 1] == "p4"
+    assert cmd[cmd.index("-b:v") + 1] == "400k"
+    # Default audio bitrate when no tier audio given
+    assert cmd[cmd.index("-b:a") + 1] == "192k"

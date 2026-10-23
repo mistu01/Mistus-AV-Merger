@@ -271,7 +271,7 @@ export const SingleRenderView: React.FC<SingleRenderViewProps> = ({
           <Sliders className="w-5 h-5" /> Render Options
         </h3>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="space-y-2">
             <label className="nb-label">Resolution</label>
             <select
@@ -285,6 +285,25 @@ export const SingleRenderView: React.FC<SingleRenderViewProps> = ({
               <option value="480p">480p (854x480)</option>
             </select>
             <p className="nb-sub">{renderOptions.resolution === 'original' ? 'Keeps native resolution.' : 'Scales + letterboxes (forces re-encode).'}</p>
+          </div>
+
+          <div className="space-y-2">
+            <label className="nb-label">Output Size</label>
+            <select
+              value={renderOptions.sizeTarget || 'balanced'}
+              onChange={e => setRenderOptions(prev => ({ ...prev, sizeTarget: e.target.value as any }))}
+              className="nb-select w-full"
+            >
+              <option value="small">Small ~250 MB/hr</option>
+              <option value="balanced">Balanced ~325 MB/hr</option>
+              <option value="high">High ~400 MB/hr</option>
+              <option value="unlimited">Max Quality (no cap)</option>
+            </select>
+            <p className="nb-sub">
+              {renderOptions.sizeTarget === 'unlimited'
+                ? 'CRF 21 — best quality, bigger files.'
+                : 'Caps file size per hour of audio (applies when re-encoding).'}
+            </p>
           </div>
 
           <div className="space-y-2">

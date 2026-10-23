@@ -47,6 +47,7 @@ export interface RenderOptions {
   overlayOpacity?: number;
   encoderChoice?: string;
   crf?: number;
+  sizeTarget?: 'small' | 'balanced' | 'high' | 'unlimited';
   cpuProfile?: 'aggressive' | 'balanced' | 'low' | 'idle';
 }
 

@@ -15,6 +15,25 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ---
 
+## [0.6.8] - 2026-10-24
+
+### Added
+- **Output Size cap** — a new "Output Size" selector in Render Options targets a concrete file size per hour of audio when re-encoding with effects:
+  - Small ≈ 250 MB/hr (128 kbps AAC)
+  - Balanced ≈ 325 MB/hr (160 kbps AAC) — **default**, so renders stay predictable
+  - High ≈ 400 MB/hr (192 kbps AAC)
+  - Max Quality (no cap) — the old CRF 21 path, unchanged
+- Party trick for the math nerds: the tier converts to `video_kbps = MB/hr × 8192 / 3600 − audio_kbps` per job and rides as ABR (`-b:v/-maxrate/-bufsize`) on every encoder family (x264, x265, QSV, NVENC, VideoToolbox); CRF branches are skipped when capped.
+
+### Changed
+- Render Options grid is now four columns (Resolution / Output Size / VHS Preset / Toggles).
+
+### Measured (same bench box, QSV + worn-tape chain, 120 s render)
+- Balanced tier came out at ~295 MB/hr equivalent (ABR undershoots slightly on looped content — inside the 250–400 window).
+- Unlimited tier on the same clip: ~12 GB/hr equivalent, i.e. the cap really clamps.
+
+---
+
 ## [0.6.7] - 2026-10-24
 
 ### Fixed

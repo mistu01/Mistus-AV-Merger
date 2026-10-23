@@ -433,6 +433,32 @@ def _pick_probe_duration(path: Path) -> Optional[float]:
         return None
 
 
+# Output size targets: MB of file size per hour of AUDIO (effects on or off).
+# (mb_per_hour, audio_bitrate_kbps) — video bitrate = the remainder.
+_SIZE_TIERS = {
+    "small": (250.0, 128),
+    "balanced": (325.0, 160),
+    "high": (400.0, 192),
+}
+
+
+def _apply_size_tier(options: Dict[str, Any], audio_dur: float) -> None:
+    """Converts a sizeTarget tier into concrete per-job bitrate caps.
+
+    video_kbps = (MB/hour * 8192 kbit/MB / 3600 s) - audio kbps, floored at a
+    sane minimum. Stored in options so it persists with the job for resumes.
+    """
+    tier = str(options.get("sizeTarget") or "balanced").lower()
+    if tier == "unlimited" or audio_dur <= 0:
+        options.pop("videoBitrateKbps", None)
+        options.pop("audioBitrateKbps", None)
+        return
+    mb_per_hour, audio_kbps = _SIZE_TIERS.get(tier, _SIZE_TIERS["balanced"])
+    total_kbps = mb_per_hour * 8192.0 / 3600.0
+    options["audioBitrateKbps"] = audio_kbps
+    options["videoBitrateKbps"] = max(150, int(round(total_kbps - audio_kbps)))
+
+
 class QueueAddRequest(BaseModel):
     jobs: List[Dict[str, Any]]
 
@@ -500,6 +526,12 @@ def add_jobs(req: QueueAddRequest):
             audio_dur = probed or 0.0
         video_dur = _pick_probe_duration(video_path) or 0.0
 
+        if mode == "encode":
+            _apply_size_tier(options, float(audio_dur))
+        else:
+            options.pop("videoBitrateKbps", None)
+            options.pop("audioBitrateKbps", None)
+
         job = RenderJob(
             job_id=f"job_{uuid.uuid4().hex[:12]}",
             audio_path=str(audio_path),
@@ -550,6 +582,8 @@ def _execute_job(job: RenderJob):
                     overlay_path=Path(str(opts.get("overlayPath"))) if opts.get("overlayPath") else None,
                     overlay_opacity=float(opts.get("overlayOpacity", 0.8)),
                     duration_sec=job.duration or None,
+                    bitrate_kbps=int(opts["videoBitrateKbps"]) if opts.get("videoBitrateKbps") else None,
+                    audio_bitrate_kbps=int(opts["audioBitrateKbps"]) if opts.get("audioBitrateKbps") else None,
                     threads=job_threads,
                 )
 

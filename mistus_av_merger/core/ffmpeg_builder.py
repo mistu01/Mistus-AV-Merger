@@ -107,6 +107,8 @@ class FFmpegCommandBuilder:
         overlay_path: Optional[Path] = None,
         overlay_opacity: float = 0.8,
         crf: int = 21,
+        bitrate_kbps: Optional[int] = None,
+        audio_bitrate_kbps: Optional[int] = None,
         threads: Optional[int] = None,
         start_time_sec: Optional[float] = None,
         duration_sec: Optional[float] = None,
@@ -185,9 +187,26 @@ class FFmpegCommandBuilder:
 
         cmd.extend(["-map", "1:a:0"])
 
-        # Codec and quality settings
+        # Codec and quality settings. When a bitrate cap is set (output size
+        # target), ABR rate control replaces CRF so the file size stays
+        # predictable; maxrate 2x / bufsize 4x absorb VHS noise spikes.
         cmd.extend(["-c:v", encoder])
-        if "nvenc" in encoder:
+        if bitrate_kbps:
+            # Keep the per-encoder speed preset, drop the quality-mode flag.
+            if "videotoolbox" in encoder:
+                cmd.extend(["-b:v", f"{bitrate_kbps}k"])  # no maxrate support on vtb
+            elif "libx265" in encoder:
+                cmd.extend(["-b:v", f"{bitrate_kbps}k", "-preset", "fast"])
+            elif "nvenc" in encoder:
+                cmd.extend(["-b:v", f"{bitrate_kbps}k", "-maxrate", f"{bitrate_kbps * 2}k",
+                            "-bufsize", f"{bitrate_kbps * 4}k", "-preset", "p4"])
+            elif "qsv" in encoder:
+                cmd.extend(["-b:v", f"{bitrate_kbps}k", "-maxrate", f"{bitrate_kbps * 2}k",
+                            "-bufsize", f"{bitrate_kbps * 4}k", "-preset", self._QSV_PRESET])
+            else:
+                cmd.extend(["-b:v", f"{bitrate_kbps}k", "-maxrate", f"{bitrate_kbps * 2}k",
+                            "-bufsize", f"{bitrate_kbps * 4}k", "-preset", self._X264_PRESET])
+        elif "nvenc" in encoder:
             cmd.extend(["-cq", str(crf), "-preset", "p4"])
         elif "qsv" in encoder:
             cmd.extend(["-global_quality", str(crf), "-preset", self._QSV_PRESET])
@@ -198,8 +217,9 @@ class FFmpegCommandBuilder:
         else:
             cmd.extend(["-crf", str(crf), "-preset", self._X264_PRESET])
 
-        # Audio encode to AAC
-        cmd.extend(["-c:a", "aac", "-b:a", "192k"])
+        # Audio encode to AAC (tiered audio bitrate rides along with the cap)
+        audio_kbps = audio_bitrate_kbps or 192
+        cmd.extend(["-c:a", "aac", "-b:a", f"{audio_kbps}k"])
 
         if threads:
             cmd.extend(["-threads", str(threads)])

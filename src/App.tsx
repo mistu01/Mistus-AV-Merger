@@ -66,6 +66,7 @@ export default function App() {
     noiseSeed: 1994,
     overlayEnabled: false,
     overlayOpacity: 0.8,
+    sizeTarget: 'balanced',
   });
 
   // Jobs Queue — starts empty; entries are added by the user
