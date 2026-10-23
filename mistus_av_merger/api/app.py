@@ -161,8 +161,13 @@ def shutdown_server():
 # frontend is bundled into the _internal directory next to the Python modules,
 # so resolve from both the app root (dev/portable) and the package root (frozen).
 def _find_frontend_dist():
+    me = Path(__file__).resolve()
     candidates = [get_app_root() / "dist"]
-    candidates.append(Path(__file__).resolve().parent.parent / "dist")
+    # Source: mistus_av_merger/dist sits next to the package. Frozen onedir:
+    # the frontend is bundled at _internal/dist, i.e. two levels above app.py
+    # (_internal/mistus_av_merger/api/app.py -> parents[2] == _internal).
+    candidates.append(me.parent.parent / "dist")
+    candidates.append(me.parents[2] / "dist" if len(me.parents) > 2 else me.parents[-1] / "dist")
     for candidate in candidates:
         if candidate.is_dir():
             return candidate
