@@ -15,6 +15,14 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ---
 
+## [0.6.5] - 2026-10-24
+
+### Fixed
+- fix(ffmpeg): static-burst noise filter used the removed `seed` option — FFmpeg 8/9 rejects it ("Error applying option 'seed' to filter 'noise'"), which failed every encode with static bursts enabled. Replaced with the supported `all_seed` channel option; all 7 VHS preset filtergraphs validated against the bundled FFmpeg build.
+- ci: added `scripts/check_presets_ffmpeg.py` preset × FFmpeg compatibility smoke test.
+
+---
+
 ## [0.6.4] - 2026-10-24
 
 ### Added

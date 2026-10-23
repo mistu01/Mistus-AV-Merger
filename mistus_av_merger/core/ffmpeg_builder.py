@@ -149,8 +149,10 @@ class FFmpegCommandBuilder:
             )
 
         # 4. Noise and static synthesis
+        # NOTE: 'seed' option was removed from vf_noise in newer FFmpeg;
+        # the channel-level 'all_seed' is the supported alias.
         if noise_static:
-            vfilters.append(f"noise=alls=18:allf=t+u:seed={noise_seed}")
+            vfilters.append(f"noise=alls=18:allf=t+u:all_seed={noise_seed}")
 
         # Combine video filters
         vf_string = ",".join(vfilters) if vfilters else "null"

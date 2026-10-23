@@ -280,7 +280,7 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
             <div className="bg-[#111] text-yellow-300 border-[3px] border-black p-3 font-mono text-[11px] break-all select-all">
               {activePreset.filtergraph || 'No filter (stream copy candidate)'}
               {nightMode && ',eq=contrast=1.1:brightness=-0.08,curves=all=\'0/0 0.5/0.4 1/0.95\':blue=\'0/0 0.5/0.58 1/1\',vignette=PI/4'}
-              {staticBursts && `,noise=alls=15:allf=t+u:seed=${noiseSeed}`}
+              {staticBursts && `,noise=alls=15:allf=t+u:all_seed=${noiseSeed}`}
             </div>
           </div>
         </div>

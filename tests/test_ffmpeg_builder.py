@@ -134,4 +134,4 @@ def test_build_reencode_render_with_filters():
     vf_chain = cmd[idx_vf + 1]
     assert "scale=1920:1080" in vf_chain
     assert "curves=all=" in vf_chain
-    assert "seed=777" in vf_chain
+    assert "all_seed=777" in vf_chain
