@@ -157,15 +157,69 @@ def _list_drives() -> List[Dict[str, str]]:
     return drives
 
 
+def _windows_known_folder(guid_str: str) -> Optional[str]:
+    """Resolves a Windows known folder (Desktop, Documents, ...) via the shell API.
+
+    This follows OneDrive "folder backup" redirection — e.g. Desktop actually
+    resolves to C:\\Users\\<name>\\OneDrive\\Desktop when backup is enabled —
+    which plain `Path.home() / name` misses, producing empty listings.
+    """
+    if os.name != "nt":
+        return None
+    try:
+        import ctypes
+        import uuid
+        from ctypes import wintypes
+
+        class _GUID(ctypes.Structure):
+            _fields_ = [
+                ("Data1", ctypes.c_ulong),
+                ("Data2", ctypes.c_ushort),
+                ("Data3", ctypes.c_ushort),
+                ("Data4", ctypes.c_ubyte * 8),
+            ]
+
+        shell32 = ctypes.windll.shell32
+        shell32.SHGetKnownFolderPath.restype = ctypes.HRESULT
+        shell32.SHGetKnownFolderPath.argtypes = (
+            ctypes.POINTER(_GUID),
+            wintypes.DWORD,
+            wintypes.HANDLE,
+            ctypes.POINTER(ctypes.c_wchar_p),
+        )
+        guid = _GUID.from_buffer_copy(uuid.UUID(guid_str).bytes_le)
+        out = ctypes.c_wchar_p()
+        hr = shell32.SHGetKnownFolderPath(
+            ctypes.byref(guid), 0, None, ctypes.byref(out)
+        )
+        result = out.value if hr == 0 else None
+        ctypes.windll.ole32.CoTaskMemFree(out)
+        return result
+    except Exception:
+        return None
+
+
+_KNOWN_FOLDER_GUIDS = {
+    "Desktop": "{B4BFCC3A-DB2C-424C-B029-7FE99A87C641}",
+    "Documents": "{FDD39AD0-238F-46AF-ADB4-6C85480369C7}",
+    "Downloads": "{374DE290-123F-4565-9164-39C4925E467B}",
+    "Music": "{4BD8D571-6D19-48D3-BE97-422220080E43}",
+    "Videos": "{59461737-7FC0-4C37-917B-0D9926C42F0A}",
+    "Pictures": "{33E28130-4E1E-4676-8A4A-A3A6968734E6}",
+}
+
+
 def _list_shortcuts() -> List[Dict[str, str]]:
     home = Path.home()
     shortcuts = [{"label": "Home", "path": str(home), "icon": "home"}]
-    named = [("Desktop", "Desktop"), ("Downloads", "Downloads"), ("Music", "Music"),
-             ("Videos", "Videos"), ("Pictures", "Pictures"), ("Documents", "Documents")]
-    for label, dirname in named:
-        candidate = home / dirname
-        if candidate.is_dir():
-            shortcuts.append({"label": label, "path": str(candidate), "icon": dirname.lower()})
+    for label, guid in _KNOWN_FOLDER_GUIDS.items():
+        resolved = _windows_known_folder(guid)
+        if not resolved:
+            candidate = home / label
+            if candidate.is_dir():
+                resolved = str(candidate)
+        if resolved and Path(resolved).is_dir():
+            shortcuts.append({"label": label, "path": resolved, "icon": label.lower()})
     return shortcuts
 
 
