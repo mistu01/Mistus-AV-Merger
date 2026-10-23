@@ -1,43 +1,117 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
+ *
+ * Real filesystem browser backed by /api/v1/fs/list and /api/v1/fs/probe.
+ * Lists the actual drives, shortcuts, folders and media files of the host
+ * computer — no mock data.
  */
 
-import React, { useState } from 'react';
-import { 
-  Folder, 
-  FileAudio, 
-  FileVideo, 
-  HardDrive, 
-  ChevronRight, 
-  X, 
-  Check, 
-  Star, 
-  Clock, 
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+  Folder,
+  FolderOpen,
+  Home,
+  Download,
+  Music,
+  Video,
+  Image,
+  FileText,
+  HardDrive,
+  FileAudio,
+  FileVideo,
+  ArrowUp,
+  ChevronRight,
+  X,
+  Check,
   Search,
-  CheckSquare,
-  Square
+  Loader2,
 } from 'lucide-react';
 import { MediaProbe } from '../utils/engine';
-import { SAMPLE_AUDIO_FILES, SAMPLE_VIDEO_CLIPS } from '../data/mockMedia';
 
 interface FileBrowserModalProps {
   isOpen: boolean;
   onClose: () => void;
   title: string;
-  targetType: 'single_audio' | 'single_video' | 'folder' | 'bulk_audio' | 'bulk_video';
+  targetType: 'single_audio' | 'single_video' | 'folder' | 'output' | 'bulk_audio' | 'bulk_video';
   onSelectPath: (path: string, probe?: MediaProbe) => void;
   onSelectMultiple?: (probes: MediaProbe[]) => void;
 }
 
-interface VirtualItem {
+interface FsEntry {
   name: string;
   path: string;
   isDir: boolean;
-  type?: 'audio' | 'video' | 'other';
-  probe?: MediaProbe;
-  size?: string;
-  duration?: string;
+  kind: 'dir' | 'audio' | 'video' | 'other';
+  sizeBytes?: number | null;
+}
+
+interface FsListing {
+  path: string | null;
+  parent: string | null;
+  isRoot: boolean;
+  drives: Array<{ label: string; path: string }>;
+  shortcuts: Array<{ label: string; path: string; icon: string }>;
+  entries: FsEntry[];
+}
+
+const SHORTCUT_ICONS: Record<string, React.ReactNode> = {
+  home: <Home className="w-3.5 h-3.5" />,
+  desktop: <Folder className="w-3.5 h-3.5" />,
+  downloads: <Download className="w-3.5 h-3.5" />,
+  music: <Music className="w-3.5 h-3.5" />,
+  videos: <Video className="w-3.5 h-3.5" />,
+  pictures: <Image className="w-3.5 h-3.5" />,
+  documents: <FileText className="w-3.5 h-3.5" />,
+};
+
+const API = '';
+
+async function fetchListing(path?: string): Promise<FsListing> {
+  const url = path
+    ? `${API}/api/v1/fs/list?path=${encodeURIComponent(path)}`
+    : `${API}/api/v1/fs/list`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.detail || `Folder listing failed (${res.status})`);
+  }
+  return res.json();
+}
+
+async function probeFile(path: string): Promise<MediaProbe> {
+  const res = await fetch(`${API}/api/v1/fs/probe`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.detail || `File probe failed (${res.status})`);
+  }
+  return res.json();
+}
+
+/** Splits a windows/unix path into breadcrumb parts (drive kept). */
+function pathBreadcrumbs(path: string): Array<{ label: string; target: string }> {
+  const parts = path.split(/[\\/]+/).filter(Boolean);
+  const crumbs: Array<{ label: string; target: string }> = [];
+  if (/^[A-Za-z]:$/.test(parts[0] || '')) {
+    crumbs.push({ label: `${parts[0]}\\`, target: `${parts[0]}\\` });
+  } else if (parts[0]) {
+    crumbs.push({ label: '/', target: '/' });
+  } else {
+    return crumbs;
+  }
+  if (crumbs[0].target === path) return crumbs;
+  const sep = /^[A-Za-z]:$/.test(parts[0]) ? '\\' : '/';
+  let acc = crumbs[0].target;
+  for (let i = 1; i < parts.length; i++) {
+    acc = acc.endsWith('\\') || acc.endsWith('/') ? acc : `${acc}${sep}`;
+    acc += parts[i];
+    crumbs.push({ label: parts[i], target: acc });
+  }
+  return crumbs;
 }
 
 export const FileBrowserModal: React.FC<FileBrowserModalProps> = ({
@@ -46,274 +120,256 @@ export const FileBrowserModal: React.FC<FileBrowserModalProps> = ({
   title,
   targetType,
   onSelectPath,
-  onSelectMultiple,
 }) => {
-  const [currentPath, setCurrentPath] = useState('/media/audio');
-  const [selectedItems, setSelectedItems] = useState<Record<string, boolean>>({});
-  const [filterType, setFilterType] = useState<'all' | 'audio' | 'video'>('all');
+  const [listing, setListing] = useState<FsListing | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [filterType, setFilterType] = useState<'all' | 'audio' | 'video'>(
+    targetType === 'single_audio' || targetType === 'bulk_audio' ? 'audio' : 'all'
+  );
   const [searchTerm, setSearchTerm] = useState('');
+  const [probingPath, setProbingPath] = useState<string | null>(null);
+
+  const load = useCallback(async (path?: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await fetchListing(path);
+      setListing(data);
+    } catch (e: any) {
+      setError(e.message || 'Could not read this folder');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      setSearchTerm('');
+      load(undefined);
+    }
+  }, [isOpen, load]);
 
   if (!isOpen) return null;
 
-  // Breadcrumbs
-  const pathParts = currentPath.split('/').filter(Boolean);
-
-  // Mock directory items
-  const virtualDirectories: Record<string, VirtualItem[]> = {
-    '/': [
-      { name: 'media', path: '/media', isDir: true },
-      { name: 'projects', path: '/projects', isDir: true },
-      { name: 'renders', path: '/renders', isDir: true },
-    ],
-    '/media': [
-      { name: 'audio', path: '/media/audio', isDir: true },
-      { name: 'video', path: '/media/video', isDir: true },
-      { name: 'overlays', path: '/media/overlays', isDir: true },
-    ],
-    '/media/audio': SAMPLE_AUDIO_FILES.map(a => ({
-      name: a.filename,
-      path: a.path,
-      isDir: false,
-      type: 'audio',
-      probe: a,
-      size: `${(a.sizeBytes / (1024 * 1024)).toFixed(1)} MB`,
-      duration: `${Math.floor(a.duration / 60)}:${Math.floor(a.duration % 60).toString().padStart(2, '0')}`,
-    })),
-    '/media/video': SAMPLE_VIDEO_CLIPS.map(v => ({
-      name: v.filename,
-      path: v.path,
-      isDir: false,
-      type: 'video',
-      probe: v,
-      size: `${(v.sizeBytes / (1024 * 1024)).toFixed(1)} MB`,
-      duration: `${v.duration}s`,
-    })),
-    '/renders': [
-      { name: 'Summer2026_Mix.mp4', path: '/renders/Summer2026_Mix.mp4', isDir: false, type: 'video', size: '48.2 MB' },
-    ],
-    '/projects': [
-      { name: 'album_visualizers', path: '/projects/album_visualizers', isDir: true },
-    ]
-  };
-
-  const currentItems = virtualDirectories[currentPath] || [];
-
-  const filteredItems = currentItems.filter(item => {
-    if (searchTerm && !item.name.toLowerCase().includes(searchTerm.toLowerCase())) {
-      return false;
-    }
-    if (filterType === 'audio' && !item.isDir && item.type !== 'audio') return false;
-    if (filterType === 'video' && !item.isDir && item.type !== 'video') return false;
+  const entries = (listing?.entries || []).filter(item => {
+    if (searchTerm && !item.name.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+    if (filterType === 'audio' && !item.isDir && item.kind !== 'audio') return false;
+    if (filterType === 'video' && !item.isDir && item.kind !== 'video') return false;
     return true;
   });
 
-  const handleItemClick = (item: VirtualItem) => {
+  const isFolderSelect = targetType === 'folder' || targetType === 'output' ||
+    targetType === 'bulk_audio' || targetType === 'bulk_video';
+
+  const handleItemClick = async (item: FsEntry) => {
     if (item.isDir) {
-      setCurrentPath(item.path);
-      setSelectedItems({});
-    } else {
-      if (targetType === 'folder') return;
-      if (onSelectMultiple && (targetType === 'bulk_audio' || targetType === 'bulk_video')) {
-        setSelectedItems(prev => ({
-          ...prev,
-          [item.path]: !prev[item.path],
-        }));
-      } else {
-        onSelectPath(item.path, item.probe);
+      load(item.path);
+      return;
+    }
+    if (targetType === 'single_audio' || targetType === 'single_video') {
+      setProbingPath(item.path);
+      try {
+        const probe = await probeFile(item.path);
+        onSelectPath(item.path, probe);
         onClose();
+      } catch (e: any) {
+        setError(e.message || 'Could not read this file');
+      } finally {
+        setProbingPath(null);
       }
+    } else if (isFolderSelect) {
+      // For folder targets, clicking a folder navigates; files do nothing.
+      return;
     }
   };
 
-  const handleSelectCurrentFolder = () => {
-    onSelectPath(currentPath);
-    onClose();
+  const handleConfirmFolder = () => {
+    if (listing?.path) {
+      onSelectPath(listing.path);
+      onClose();
+    }
   };
 
-  const handleConfirmMultiSelect = () => {
-    const selectedProbes: MediaProbe[] = [];
-    currentItems.forEach(i => {
-      if (selectedItems[i.path] && i.probe) {
-        selectedProbes.push(i.probe);
-      }
-    });
-    if (onSelectMultiple && selectedProbes.length > 0) {
-      onSelectMultiple(selectedProbes);
-    }
-    onClose();
-  };
+  const crumbs = listing?.path ? pathBreadcrumbs(listing.path) : [];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
-        {/* Modal Header */}
-        <div className="p-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 animate-nb-pop">
+      <div className="nb-card w-full max-w-3xl overflow-hidden flex flex-col max-h-[85vh]">
+        {/* Header */}
+        <div className="bg-yellow-300 border-b-[3px] border-black px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <HardDrive className="w-4 h-4 text-indigo-400" />
-            <h3 className="font-semibold text-slate-100 text-sm">
-              {title}
-            </h3>
+            <HardDrive className="w-4 h-4" />
+            <h3 className="nb-title text-sm">{title}</h3>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
-          >
+          <button onClick={onClose} className="nb-btn nb-btn-sm nb-btn-white nb-press p-1.5">
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Path Navigation & Breadcrumbs */}
-        <div className="p-3 bg-slate-950/60 border-b border-slate-800/80 flex items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-1.5 overflow-x-auto py-1 font-mono text-slate-300">
+        {/* Breadcrumbs + search */}
+        <div className="px-4 py-2.5 border-b-[3px] border-black bg-white flex items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-1 overflow-x-auto py-1 font-mono font-semibold">
             <button
-              onClick={() => setCurrentPath('/')}
-              className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-indigo-400"
+              onClick={() => load(undefined)}
+              className="nb-btn nb-btn-sm nb-btn-white nb-press px-1.5 py-0.5"
+              title="Drives"
             >
-              /
+              <HardDrive className="w-3 h-3" />
             </button>
-            {pathParts.map((part, idx) => {
-              const fullPartPath = '/' + pathParts.slice(0, idx + 1).join('/');
-              return (
-                <React.Fragment key={fullPartPath}>
-                  <ChevronRight className="w-3.5 h-3.5 text-slate-600 shrink-0" />
-                  <button
-                    onClick={() => setCurrentPath(fullPartPath)}
-                    className="hover:underline text-slate-200 hover:text-indigo-300 px-1 py-0.5 rounded"
-                  >
-                    {part}
-                  </button>
-                </React.Fragment>
-              );
-            })}
+            {crumbs.map((c, idx) => (
+              <React.Fragment key={c.target + idx}>
+                <ChevronRight className="w-3 h-3 text-black/50 shrink-0" />
+                <button
+                  onClick={() => load(c.target)}
+                  className={`px-1 py-0.5 font-mono hover:underline ${idx === crumbs.length - 1 ? 'font-black underline' : ''}`}
+                  title={c.target}
+                >
+                  {c.label}
+                </button>
+              </React.Fragment>
+            ))}
           </div>
 
-          {/* Search filter */}
-          <div className="relative w-48 shrink-0">
-            <input
-              type="text"
-              placeholder="Search..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-7 pr-2 py-1 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-            />
-            <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2 top-2" />
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="flex border-[3px] border-black divide-x-[3px] divide-black">
+              {(['all', 'audio', 'video'] as const).map(f => (
+                <button
+                  key={f}
+                  onClick={() => setFilterType(f)}
+                  className={`px-2 py-1 text-[10px] font-black uppercase ${
+                    filterType === f ? 'bg-black text-white' : 'bg-white hover:bg-yellow-200'
+                  }`}
+                >
+                  {f}
+                </button>
+              ))}
+            </div>
+            <div className="relative w-40">
+              <input
+                type="text"
+                placeholder="Filter..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="nb-input w-full pl-7 py-1"
+              />
+              <Search className="w-3.5 h-3.5 absolute left-2 top-2 text-black" />
+            </div>
           </div>
         </div>
 
-        {/* Quick Location Shortcuts & Items List */}
-        <div className="grid grid-cols-1 md:grid-cols-4 flex-1 overflow-hidden">
-          {/* Sidebar shortcuts */}
-          <div className="p-3 bg-slate-950/40 border-r border-slate-800/80 space-y-2 text-xs hidden md:block">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 px-2 block">
-              Drives & Locations
-            </span>
-            <button
-              onClick={() => setCurrentPath('/media/audio')}
-              className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left transition-colors ${
-                currentPath === '/media/audio' ? 'bg-indigo-600/20 text-indigo-300' : 'text-slate-400 hover:bg-slate-800'
-              }`}
-            >
-              <FileAudio className="w-3.5 h-3.5 text-violet-400" />
-              <span>Audio Samples</span>
-            </button>
-            <button
-              onClick={() => setCurrentPath('/media/video')}
-              className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left transition-colors ${
-                currentPath === '/media/video' ? 'bg-indigo-600/20 text-indigo-300' : 'text-slate-400 hover:bg-slate-800'
-              }`}
-            >
-              <FileVideo className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Video Clips</span>
-            </button>
-            <button
-              onClick={() => setCurrentPath('/renders')}
-              className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left transition-colors ${
-                currentPath === '/renders' ? 'bg-indigo-600/20 text-indigo-300' : 'text-slate-400 hover:bg-slate-800'
-              }`}
-            >
-              <Folder className="w-3.5 h-3.5 text-amber-400" />
-              <span>Renders Folder</span>
-            </button>
+        {/* Sidebar + list */}
+        <div className="grid grid-cols-1 md:grid-cols-4 flex-1 overflow-hidden bg-white">
+          <div className="p-3 space-y-1 text-xs bg-[#f4efe7] border-r-[3px] border-black overflow-y-auto max-h-64 md:max-h-none">
+            <span className="nb-label block px-2 pb-1">Places</span>
+            {(listing?.shortcuts || []).map(sc => (
+              <button
+                key={sc.path}
+                onClick={() => load(sc.path)}
+                className="w-full flex items-center gap-2 px-2 py-1.5 border-2 border-transparent hover:border-black hover:bg-yellow-200 font-bold text-left"
+                title={sc.path}
+              >
+                <span className="shrink-0">{SHORTCUT_ICONS[sc.icon] || <Folder className="w-3.5 h-3.5" />}</span>
+                <span className="truncate">{sc.label}</span>
+              </button>
+            ))}
+            {(listing?.drives || []).length > 0 && (
+              <>
+                <span className="nb-label block px-2 pt-2 pb-1">Drives</span>
+                {(listing?.drives || []).map(d => (
+                  <button
+                    key={d.path}
+                    onClick={() => load(d.path)}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 border-2 border-transparent hover:border-black hover:bg-cyan-200 font-bold text-left"
+                  >
+                    <HardDrive className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">{d.label}</span>
+                  </button>
+                ))}
+              </>
+            )}
           </div>
 
-          {/* File grid / list */}
-          <div className="md:col-span-3 p-4 overflow-y-auto max-h-[50vh] divide-y divide-slate-800/50">
-            {filteredItems.length === 0 ? (
-              <div className="p-8 text-center text-xs text-slate-500">
-                No matching media files or directories in this folder.
+          <div className="md:col-span-3 overflow-y-auto max-h-[50vh]">
+            {loading ? (
+              <div className="p-8 flex items-center justify-center gap-2 text-xs font-bold">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Reading folder...</span>
+              </div>
+            ) : error ? (
+              <div className="p-6 text-center">
+                <div className="nb-badge nb-badge-red inline-block mb-2">Error</div>
+                <p className="text-xs font-semibold">{error}</p>
+                <button onClick={() => load(listing?.parent || undefined)} className="nb-btn nb-btn-sm nb-btn-yellow nb-press mt-3">
+                  <ArrowUp className="w-3 h-3" /> Go up / retry
+                </button>
+              </div>
+            ) : entries.length === 0 ? (
+              <div className="p-8 text-center text-xs font-semibold text-black/60">
+                No matching media files or folders here.
               </div>
             ) : (
-              filteredItems.map(item => {
-                const isSelected = selectedItems[item.path];
-                return (
-                  <div
-                    key={item.path}
-                    onClick={() => handleItemClick(item)}
-                    className={`flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-colors ${
-                      isSelected
-                        ? 'bg-indigo-600/20 text-indigo-200'
-                        : 'hover:bg-slate-800/60 text-slate-300'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 truncate">
-                      {item.isDir ? (
-                        <Folder className="w-4 h-4 text-amber-400 shrink-0" />
-                      ) : item.type === 'audio' ? (
-                        <FileAudio className="w-4 h-4 text-violet-400 shrink-0" />
+              entries.map(item => (
+                <button
+                  key={item.path}
+                  onClick={() => handleItemClick(item)}
+                  className={`w-full flex items-center justify-between px-4 py-2.5 border-b-2 border-black/10 text-left hover:bg-yellow-100 group ${
+                    item.isDir ? '' : 'hover:bg-lime-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    {item.isDir ? (
+                      listing?.parent === undefined ? (
+                        <FolderOpen className="w-4 h-4 shrink-0" />
                       ) : (
-                        <FileVideo className="w-4 h-4 text-cyan-400 shrink-0" />
-                      )}
-                      <div>
-                        <div className="font-medium text-xs truncate max-w-sm">
-                          {item.name}
-                        </div>
-                        {item.duration && (
-                          <div className="text-[10px] text-slate-500 font-mono">
-                            Duration: {item.duration} &bull; Size: {item.size}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {!item.isDir && onSelectMultiple && (targetType === 'bulk_audio' || targetType === 'bulk_video') && (
-                      <div className="shrink-0 text-slate-400">
-                        {isSelected ? (
-                          <CheckSquare className="w-4 h-4 text-indigo-400" />
-                        ) : (
-                          <Square className="w-4 h-4 text-slate-600" />
-                        )}
-                      </div>
+                        <Folder className="w-4 h-4 shrink-0" />
+                      )
+                    ) : item.kind === 'audio' ? (
+                      <FileAudio className="w-4 h-4 shrink-0" />
+                    ) : (
+                      <FileVideo className="w-4 h-4 shrink-0" />
+                    )}
+                    <span className={`truncate max-w-[380px] text-xs font-bold ${item.isDir ? '' : 'font-mono'}`}>
+                      {item.name}
+                    </span>
+                    {probingPath === item.path && (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
                     )}
                   </div>
-                );
-              })
+                  <div className="flex items-center gap-2 shrink-0">
+                    {item.isDir ? (
+                      <span className="nb-badge nb-badge-cyan opacity-70 group-hover:opacity-100">open</span>
+                    ) : (
+                      <span className="text-[10px] font-mono font-bold text-black/60">
+                        {item.sizeBytes ? `${(item.sizeBytes / (1024 * 1024)).toFixed(1)} MB` : ''}
+                      </span>
+                    )}
+                  </div>
+                </button>
+              ))
             )}
           </div>
         </div>
 
-        {/* Modal Footer */}
-        <div className="p-4 bg-slate-950 border-t border-slate-800 flex items-center justify-between">
-          <div className="text-xs text-slate-400 font-mono truncate max-w-md">
-            Current: {currentPath}
+        {/* Footer */}
+        <div className="bg-black text-white px-4 py-3 flex items-center justify-between gap-3">
+          <div className="text-xs font-mono truncate max-w-md" title={listing?.path || 'Drives & Places'}>
+            {listing?.path ? `Current: ${listing.path}` : 'Pick a drive or place to browse'}
           </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={onClose}
-              className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors"
-            >
-              Cancel
-            </button>
-
-            {targetType === 'folder' || targetType === 'bulk_audio' || targetType === 'bulk_video' ? (
-              <button
-                onClick={handleSelectCurrentFolder}
-                className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow transition-colors cursor-pointer"
-              >
-                <Check className="w-3.5 h-3.5" />
-                <span>Select This Folder</span>
+          <div className="flex items-center gap-2 shrink-0">
+            {listing?.parent && (
+              <button onClick={() => load(listing.parent!)} className="nb-btn nb-btn-sm nb-btn-white nb-press">
+                <ArrowUp className="w-3.5 h-3.5" /> Up
               </button>
-            ) : null}
+            )}
+            <button onClick={onClose} className="nb-btn nb-btn-sm nb-btn-pink nb-press">
+              <X className="w-3.5 h-3.5" /> Cancel
+            </button>
+            {isFolderSelect && listing?.path && (
+              <button onClick={handleConfirmFolder} className="nb-btn nb-btn-sm nb-btn-lime nb-press">
+                <Check className="w-3.5 h-3.5" /> Select This Folder
+              </button>
+            )}
           </div>
         </div>
       </div>

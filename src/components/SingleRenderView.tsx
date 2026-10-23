@@ -4,27 +4,25 @@
  */
 
 import React, { useState } from 'react';
-import { 
-  FileAudio, 
-  FileVideo, 
-  Repeat, 
-  Zap, 
-  Layers, 
-  Clock, 
-  CheckCircle2, 
-  Sparkles, 
-  FolderOpen, 
-  Play, 
-  PlusCircle, 
+import {
+  FileAudio,
+  FileVideo,
+  Repeat,
+  Zap,
+  Layers,
+  CheckCircle2,
+  FolderOpen,
+  Play,
+  PlusCircle,
   AlertCircle,
-  Sliders
+  Sliders,
 } from 'lucide-react';
-import { 
-  MediaProbe, 
-  RenderOptions, 
-  computeCopyVsEncode, 
-  resolveContainerSafety, 
-  expandNamingPattern 
+import {
+  MediaProbe,
+  RenderOptions,
+  computeCopyVsEncode,
+  resolveContainerSafety,
+  expandNamingPattern,
 } from '../utils/engine';
 import { VHS_PRESETS } from '../data/presets';
 
@@ -61,7 +59,6 @@ export const SingleRenderView: React.FC<SingleRenderViewProps> = ({
   onPreview5s,
 }) => {
   const [namingPattern, setNamingPattern] = useState('{audio_name}.{video_ext}');
-  const [aspectPolicy, setAspectPolicy] = useState<'letterbox' | 'crop'>('letterbox');
 
   const formatDuration = (sec?: number) => {
     if (!sec) return '0:00';
@@ -94,7 +91,7 @@ export const SingleRenderView: React.FC<SingleRenderViewProps> = ({
     ? (selectedAudio.duration / selectedVideo.duration).toFixed(1)
     : '0';
 
-  const handleQueue = (startImmediately: boolean = false) => {
+  const handleQueue = () => {
     if (!selectedAudio || !selectedVideo) return;
     onAddToQueue({
       audio: selectedAudio,
@@ -108,326 +105,256 @@ export const SingleRenderView: React.FC<SingleRenderViewProps> = ({
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      {/* Top Media Input Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Audio Input Card */}
-        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-sm hover:border-slate-700 transition-all flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-violet-950/60 border border-violet-500/30 flex items-center justify-center text-violet-400">
+      {/* Step 1 — pick media */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="nb-stripe h-2 w-24" />
+          <h3 className="nb-title text-xl">Pick Your Media</h3>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Audio */}
+          <div className="nb-card p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 border-[3px] border-black bg-pink-400 flex items-center justify-center">
                   <FileAudio className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-slate-100 text-sm">Audio Source Track</h3>
-                  <p className="text-xs text-slate-400">Longer master audio soundtrack</p>
+                  <h3 className="nb-title text-sm">Audio Track</h3>
+                  <p className="nb-sub font-bold">The long soundtrack</p>
                 </div>
               </div>
-              <button
-                onClick={onSelectAudioClick}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 text-xs font-medium border border-violet-500/30 transition-all cursor-pointer"
-              >
-                <FolderOpen className="w-3.5 h-3.5" />
-                <span>Browse File</span>
+              <button onClick={onSelectAudioClick} className="nb-btn nb-btn-sm nb-btn-pink nb-press">
+                <FolderOpen className="w-3.5 h-3.5" /> Browse
               </button>
             </div>
 
             {selectedAudio ? (
-              <div className="bg-slate-950/70 rounded-xl p-4 border border-slate-800/80 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-sm text-slate-200 font-medium truncate max-w-[280px]">
+              <div className="nb-inset p-3 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-sm font-bold truncate" title={selectedAudio.filename}>
                     {selectedAudio.filename}
                   </span>
-                  <span className="text-xs px-2 py-0.5 rounded bg-violet-900/50 text-violet-300 font-mono uppercase">
-                    {selectedAudio.audioCodec || selectedAudio.format}
-                  </span>
+                  <span className="nb-badge nb-badge-pink shrink-0">{selectedAudio.audioCodec || selectedAudio.format}</span>
                 </div>
-                <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-800/60 text-xs text-slate-400">
+                <div className="grid grid-cols-3 gap-2 pt-2 border-t-2 border-black/10 text-[10px] font-bold">
                   <div>
-                    <span className="block text-[10px] uppercase text-slate-500">Duration</span>
-                    <span className="font-mono text-slate-300">{formatDuration(selectedAudio.duration)} ({selectedAudio.duration.toFixed(1)}s)</span>
+                    <span className="nb-label block">Duration</span>
+                    <span className="font-mono">{formatDuration(selectedAudio.duration)}</span>
                   </div>
                   <div>
-                    <span className="block text-[10px] uppercase text-slate-500">Sample Rate</span>
-                    <span className="font-mono text-slate-300">{selectedAudio.sampleRate ? `${selectedAudio.sampleRate / 1000} kHz` : '44.1 kHz'}</span>
+                    <span className="nb-label block">Sample Rate</span>
+                    <span className="font-mono">{selectedAudio.sampleRate ? `${selectedAudio.sampleRate / 1000} kHz` : '44.1 kHz'}</span>
                   </div>
                   <div>
-                    <span className="block text-[10px] uppercase text-slate-500">File Size</span>
-                    <span className="font-mono text-slate-300">{(selectedAudio.sizeBytes / (1024 * 1024)).toFixed(1)} MB</span>
+                    <span className="nb-label block">Size</span>
+                    <span className="font-mono">{(selectedAudio.sizeBytes / (1024 * 1024)).toFixed(1)} MB</span>
                   </div>
                 </div>
               </div>
             ) : (
-              <div 
+              <button
                 onClick={onSelectAudioClick}
-                className="border-2 border-dashed border-slate-800 hover:border-violet-500/40 rounded-xl p-6 text-center cursor-pointer transition-colors bg-slate-950/30"
+                className="w-full border-[3px] border-dashed border-black/50 hover:bg-yellow-100 p-6 text-center cursor-pointer"
               >
-                <FileAudio className="w-8 h-8 text-slate-600 mx-auto mb-2" />
-                <p className="text-xs text-slate-300 font-medium">Click to select audio file</p>
-                <p className="text-[11px] text-slate-500 mt-1">Supports MP3, WAV, FLAC, M4A, AAC, OGG, OPUS</p>
-              </div>
+                <FileAudio className="w-8 h-8 mx-auto mb-2 text-black/30" />
+                <p className="text-xs font-black">Click to pick an audio file</p>
+                <p className="nb-sub font-semibold mt-0.5">MP3, WAV, FLAC, M4A, AAC, OGG, OPUS</p>
+              </button>
             )}
           </div>
-        </div>
 
-        {/* Video Clip Input Card */}
-        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-sm hover:border-slate-700 transition-all flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-cyan-950/60 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+          {/* Video */}
+          <div className="nb-card p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 border-[3px] border-black bg-cyan-300 flex items-center justify-center">
                   <FileVideo className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-slate-100 text-sm">Video Clip (Looped)</h3>
-                  <p className="text-xs text-slate-400">Short video clip to repeat seamlessly</p>
+                  <h3 className="nb-title text-sm">Video Clip</h3>
+                  <p className="nb-sub font-bold">Loops for the whole audio</p>
                 </div>
               </div>
-              <button
-                onClick={onSelectVideoClick}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 text-xs font-medium border border-cyan-500/30 transition-all cursor-pointer"
-              >
-                <FolderOpen className="w-3.5 h-3.5" />
-                <span>Browse File</span>
+              <button onClick={onSelectVideoClick} className="nb-btn nb-btn-sm nb-btn-cyan nb-press">
+                <FolderOpen className="w-3.5 h-3.5" /> Browse
               </button>
             </div>
 
             {selectedVideo ? (
-              <div className="bg-slate-950/70 rounded-xl p-4 border border-slate-800/80 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-sm text-slate-200 font-medium truncate max-w-[280px]">
+              <div className="nb-inset p-3 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-sm font-bold truncate" title={selectedVideo.filename}>
                     {selectedVideo.filename}
                   </span>
-                  <span className="text-xs px-2 py-0.5 rounded bg-cyan-900/50 text-cyan-300 font-mono uppercase">
-                    {selectedVideo.videoCodec || selectedVideo.format}
-                  </span>
+                  <span className="nb-badge nb-badge-cyan shrink-0">{selectedVideo.videoCodec || selectedVideo.format}</span>
                 </div>
-                <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-800/60 text-xs text-slate-400">
+                <div className="grid grid-cols-3 gap-2 pt-2 border-t-2 border-black/10 text-[10px] font-bold">
                   <div>
-                    <span className="block text-[10px] uppercase text-slate-500">Duration</span>
-                    <span className="font-mono text-slate-300">{formatDuration(selectedVideo.duration)} ({selectedVideo.duration.toFixed(1)}s)</span>
+                    <span className="nb-label block">Duration</span>
+                    <span className="font-mono">{formatDuration(selectedVideo.duration)}</span>
                   </div>
                   <div>
-                    <span className="block text-[10px] uppercase text-slate-500">Resolution</span>
-                    <span className="font-mono text-slate-300">{selectedVideo.width}x{selectedVideo.height} @ {selectedVideo.fps || 30}fps</span>
+                    <span className="nb-label block">Resolution</span>
+                    <span className="font-mono">{selectedVideo.width}x{selectedVideo.height}</span>
                   </div>
                   <div>
-                    <span className="block text-[10px] uppercase text-slate-500">File Size</span>
-                    <span className="font-mono text-slate-300">{(selectedVideo.sizeBytes / (1024 * 1024)).toFixed(1)} MB</span>
+                    <span className="nb-label block">Size</span>
+                    <span className="font-mono">{(selectedVideo.sizeBytes / (1024 * 1024)).toFixed(1)} MB</span>
                   </div>
                 </div>
               </div>
             ) : (
-              <div 
+              <button
                 onClick={onSelectVideoClick}
-                className="border-2 border-dashed border-slate-800 hover:border-cyan-500/40 rounded-xl p-6 text-center cursor-pointer transition-colors bg-slate-950/30"
+                className="w-full border-[3px] border-dashed border-black/50 hover:bg-lime-100 p-6 text-center cursor-pointer"
               >
-                <FileVideo className="w-8 h-8 text-slate-600 mx-auto mb-2" />
-                <p className="text-xs text-slate-300 font-medium">Click to select video clip</p>
-                <p className="text-[11px] text-slate-500 mt-1">Supports MP4, MKV, MOV, WEBM, TS, AVI</p>
-              </div>
+                <FileVideo className="w-8 h-8 mx-auto mb-2 text-black/30" />
+                <p className="text-xs font-black">Click to pick a video clip</p>
+                <p className="nb-sub font-semibold mt-0.5">MP4, MKV, MOV, WEBM, TS, AVI</p>
+              </button>
             )}
           </div>
         </div>
       </div>
 
-      {/* Looping & Strategy Banner */}
+      {/* Looping summary */}
       {selectedAudio && selectedVideo && (
-        <div className="bg-gradient-to-r from-slate-900 via-slate-900/90 to-indigo-950/40 border border-slate-800 rounded-2xl p-5 shadow-sm">
-          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shrink-0">
-                <Repeat className="w-6 h-6" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h4 className="font-semibold text-slate-200 text-sm">
-                    Looping Summary: {loopCount}x repetitions
-                  </h4>
-                  <span className="text-xs text-slate-400">
-                    ({selectedVideo.duration.toFixed(1)}s clip &rarr; {formatDuration(selectedAudio.duration)} audio)
-                  </span>
-                </div>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  The video clip loops continuously to match the audio length exactly. Tail-end trimmed seamlessly at keyframe boundary.
-                </p>
-              </div>
+        <div className="nb-card bg-yellow-300 p-5 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 border-[3px] border-black bg-white shadow-[3px_3px_0_#000] flex items-center justify-center shrink-0">
+              <Repeat className="w-6 h-6" />
             </div>
+            <div>
+              <h4 className="nb-title text-sm">
+                Loops: {loopCount}x &mdash; this clip repeats until the audio ends
+              </h4>
+              <p className="text-xs font-bold mt-0.5">
+                {selectedVideo.duration.toFixed(1)}s clip &rarr; {formatDuration(selectedAudio.duration)} audio. Tail trimmed cleanly at a keyframe.
+              </p>
+            </div>
+          </div>
 
-            {/* Copy vs Encode Badge */}
-            <div className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-xs font-medium shrink-0 ${
-              copyDecision.mode === 'copy'
-                ? 'bg-emerald-950/50 border-emerald-500/30 text-emerald-300'
-                : 'bg-amber-950/50 border-amber-500/30 text-amber-300'
-            }`}>
-              {copyDecision.mode === 'copy' ? (
-                <>
-                  <Zap className="w-4 h-4 text-emerald-400" />
-                  <div>
-                    <span className="font-semibold block">Stream Copy (Fast / Remux)</span>
-                    <span className="text-[10px] text-emerald-400/80">Zero re-encoding loss &bull; Instant speed</span>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <Layers className="w-4 h-4 text-amber-400" />
-                  <div>
-                    <span className="font-semibold block">Full Re-encode Required</span>
-                    <span className="text-[10px] text-amber-400/80 max-w-[240px] truncate block">
-                      {copyDecision.reason}
-                    </span>
-                  </div>
-                </>
-              )}
-            </div>
+          <div className={`flex items-center gap-2 px-4 py-2.5 border-[3px] border-black text-xs font-black shrink-0 bg-white shadow-[3px_3px_0_#000]`}>
+            {copyDecision.mode === 'copy' ? (
+              <>
+                <Zap className="w-4 h-4" />
+                <div>
+                  <span className="block uppercase">Fast Stream Copy</span>
+                  <span className="text-[10px] font-bold text-black/60">No re-encode &bull; Lossless</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <Layers className="w-4 h-4" />
+                <div>
+                  <span className="block uppercase">Re-encode</span>
+                  <span className="text-[10px] font-bold text-black/60 max-w-[240px] truncate block">{copyDecision.reason}</span>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
 
-      {/* Render Configuration Panel */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-sm space-y-6">
-        <h3 className="font-semibold text-slate-100 text-sm flex items-center gap-2">
-          <Sliders className="w-4 h-4 text-indigo-400" />
-          <span>Render Pipeline & Options</span>
+      {/* Options + output */}
+      <div className="nb-card p-6 space-y-6">
+        <h3 className="nb-title text-lg flex items-center gap-2">
+          <Sliders className="w-5 h-5" /> Render Options
         </h3>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Resolution Option */}
           <div className="space-y-2">
-            <label className="block text-xs font-medium text-slate-300">
-              Output Resolution
-            </label>
+            <label className="nb-label">Resolution</label>
             <select
               value={renderOptions.resolution}
               onChange={e => setRenderOptions(prev => ({ ...prev, resolution: e.target.value as any }))}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+              className="nb-select w-full"
             >
-              <option value="original">Original / Native (Allows Stream Copy)</option>
-              <option value="1080p">1080p Full HD (1920x1080)</option>
-              <option value="720p">720p HD (1280x720)</option>
-              <option value="480p">480p SD (854x480)</option>
+              <option value="original">Original (allows fast copy)</option>
+              <option value="1080p">1080p (1920x1080)</option>
+              <option value="720p">720p (1280x720)</option>
+              <option value="480p">480p (854x480)</option>
             </select>
-            <p className="text-[11px] text-slate-500">
-              {renderOptions.resolution === 'original' 
-                ? 'Preserves native resolution without scaling.' 
-                : 'Forces Lanczos scaling with letterbox aspect ratio preservation.'}
-            </p>
+            <p className="nb-sub">{renderOptions.resolution === 'original' ? 'Keeps native resolution.' : 'Scales + letterboxes (forces re-encode).'}</p>
           </div>
 
-          {/* VHS Preset Quick Selector */}
           <div className="space-y-2">
-            <label className="block text-xs font-medium text-slate-300">
-              VHS Aesthetic Preset
-            </label>
+            <label className="nb-label">VHS Preset</label>
             <select
               value={renderOptions.vhsPreset || 'none'}
               onChange={e => setRenderOptions(prev => ({ ...prev, vhsPreset: e.target.value }))}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+              className="nb-select w-full"
             >
               {VHS_PRESETS.map(preset => (
-                <option key={preset.id} value={preset.id}>
-                  {preset.name}
-                </option>
+                <option key={preset.id} value={preset.id}>{preset.name}</option>
               ))}
             </select>
-            <p className="text-[11px] text-slate-500">
-              Simulates tape degradation, scanlines, and tracking phase.
-            </p>
+            <p className="nb-sub">Tape look, scanlines, tracking effects.</p>
           </div>
 
-          {/* Quick Effect Toggles */}
-          <div className="space-y-3">
-            <label className="block text-xs font-medium text-slate-300">
-              Visual Toggles
-            </label>
-            <div className="space-y-2">
-              <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300">
-                <input
-                  type="checkbox"
-                  checked={!!renderOptions.nightModeEnabled}
-                  onChange={e => setRenderOptions(prev => ({ ...prev, nightModeEnabled: e.target.checked }))}
-                  className="rounded border-slate-700 bg-slate-950 text-indigo-600 focus:ring-0"
-                />
-                <span>Night Mode (cool blue tint + vignette)</span>
+          <div className="space-y-2">
+            <label className="nb-label">Toggles</label>
+            <div className="space-y-2 pt-1">
+              <label className="flex items-center gap-2 cursor-pointer text-xs font-bold">
+                <input type="checkbox" className="nb-check" checked={!!renderOptions.nightModeEnabled}
+                  onChange={e => setRenderOptions(prev => ({ ...prev, nightModeEnabled: e.target.checked }))} />
+                <span>Night mode (cool tint + vignette)</span>
               </label>
-
-              <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300">
-                <input
-                  type="checkbox"
-                  checked={!!renderOptions.noiseStaticEnabled}
-                  onChange={e => setRenderOptions(prev => ({ ...prev, noiseStaticEnabled: e.target.checked }))}
-                  className="rounded border-slate-700 bg-slate-950 text-indigo-600 focus:ring-0"
-                />
-                <span>Film Grain & Static Bursts</span>
+              <label className="flex items-center gap-2 cursor-pointer text-xs font-bold">
+                <input type="checkbox" className="nb-check" checked={!!renderOptions.noiseStaticEnabled}
+                  onChange={e => setRenderOptions(prev => ({ ...prev, noiseStaticEnabled: e.target.checked }))} />
+                <span>Film grain &amp; static bursts</span>
               </label>
             </div>
           </div>
         </div>
 
-        {/* Output Destination & Filename */}
-        <div className="pt-4 border-t border-slate-800/80 space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="block text-xs font-medium text-slate-300">
-                Output Folder
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  readOnly
-                  value={outputFolder}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 font-mono"
-                />
-                <button
-                  onClick={onSelectOutputFolderClick}
-                  className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-medium transition-colors"
-                >
-                  Change
-                </button>
-              </div>
+        {/* Output destination */}
+        <div className="pt-4 border-t-[3px] border-black/10 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <label className="nb-label">Output Folder</label>
+            <div className="flex gap-2">
+              <input type="text" readOnly value={outputFolder} className="nb-input nb-input-readonly w-full text-[11px]" />
+              <button onClick={onSelectOutputFolderClick} className="nb-btn nb-btn-lime nb-press shrink-0">
+                Change
+              </button>
             </div>
+          </div>
 
-            <div className="space-y-1.5">
-              <label className="block text-xs font-medium text-slate-300">
-                Target Output Filename
-              </label>
-              <input
-                type="text"
-                readOnly
-                value={predictedOutputName}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-indigo-300 font-mono font-medium"
-              />
-              {containerSafety.changed && (
-                <p className="text-[11px] text-amber-400 flex items-center gap-1 mt-1">
-                  <AlertCircle className="w-3 h-3" />
-                  <span>{containerSafety.reason}</span>
-                </p>
-              )}
-            </div>
+          <div className="space-y-1.5">
+            <label className="nb-label">Output File Name</label>
+            <input type="text" readOnly value={predictedOutputName}
+              className="nb-input nb-input-readonly w-full font-mono text-[11px] font-bold" />
+            {containerSafety.changed && (
+              <p className="text-[11px] font-bold flex items-center gap-1 mt-1">
+                <AlertCircle className="w-3 h-3" /> {containerSafety.reason}
+              </p>
+            )}
           </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-4 border-t border-slate-800/80">
-          <button
-            onClick={onPreview5s}
-            disabled={!selectedAudio || !selectedVideo}
-            className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:hover:bg-slate-800 text-slate-200 text-xs font-medium transition-all cursor-pointer"
-          >
-            <Play className="w-3.5 h-3.5" />
-            <span>Generate 5s Sample Preview</span>
+        {/* Actions */}
+        <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-4 border-t-[3px] border-black/10">
+          <button onClick={onPreview5s} disabled={!selectedAudio || !selectedVideo}
+            className="nb-btn nb-btn-white nb-press w-full sm:w-auto disabled:opacity-40">
+            <Play className="w-3.5 h-3.5 fill-black" /> 5s Preview
           </button>
 
-          <button
-            onClick={() => handleQueue(false)}
-            disabled={!selectedAudio || !selectedVideo}
-            className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:hover:bg-indigo-600 text-white text-xs font-semibold shadow-lg shadow-indigo-600/20 transition-all cursor-pointer"
-          >
-            <PlusCircle className="w-4 h-4" />
-            <span>Add Job to Queue</span>
+          <button onClick={handleQueue} disabled={!selectedAudio || !selectedVideo}
+            className="nb-btn nb-btn-lg nb-btn-yellow nb-press w-full sm:w-auto disabled:opacity-40">
+            <PlusCircle className="w-4 h-4" /> Add To Queue
           </button>
         </div>
       </div>
+
+      {/* Blank OK note */}
+      {(!selectedAudio || !selectedVideo) && (
+        <p className="text-center nb-sub font-bold flex items-center justify-center gap-2">
+          <CheckCircle2 className="w-3.5 h-3.5" /> Everything runs locally on your machine &mdash; nothing leaves it.
+        </p>
+      )}
     </div>
   );
 };

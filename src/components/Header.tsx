@@ -4,16 +4,16 @@
  */
 
 import React from 'react';
-import { 
-  Film, 
-  Cpu, 
-  ListOrdered, 
-  Sliders, 
-  Sparkles, 
-  Activity, 
-  Settings as SettingsIcon, 
-  Info, 
-  Power 
+import {
+  Film,
+  Cpu,
+  ListOrdered,
+  Sliders,
+  Sparkles,
+  Activity,
+  Settings as SettingsIcon,
+  Info,
+  Power,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -28,6 +28,13 @@ interface HeaderProps {
   onQuit: () => void;
 }
 
+const TABS: Array<{ id: HeaderProps['activeTab']; label: string; icon: React.ReactNode; color: string }> = [
+  { id: 'single', label: 'Single', icon: <Film className="w-4 h-4" />, color: 'bg-yellow-300' },
+  { id: 'bulk', label: 'Bulk Auto-Pair', icon: <Sliders className="w-4 h-4" />, color: 'bg-pink-400' },
+  { id: 'effects', label: 'VHS & Night FX', icon: <Sparkles className="w-4 h-4" />, color: 'bg-lime-300' },
+  { id: 'queue', label: 'Queue', icon: <ListOrdered className="w-4 h-4" />, color: 'bg-cyan-300' },
+];
+
 export const Header: React.FC<HeaderProps> = ({
   activeTab,
   setActiveTab,
@@ -40,132 +47,78 @@ export const Header: React.FC<HeaderProps> = ({
   onQuit,
 }) => {
   return (
-    <header className="bg-slate-900 border-b border-slate-800 text-slate-100 select-none">
+    <header className="bg-white border-b-[3px] border-black select-none">
+      {/* Marquee stripe */}
+      <div className="nb-stripe h-2 animate-nb-marquee" />
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
+        <div className="flex items-center justify-between h-16 gap-4">
           {/* Logo & Brand */}
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-500 flex items-center justify-center shadow-lg shadow-indigo-500/20 ring-1 ring-white/20">
-              <Film className="w-5 h-5 text-white" />
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="w-10 h-10 border-[3px] border-black bg-yellow-300 flex items-center justify-center shadow-[3px_3px_0_#000]">
+              <Film className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-bold text-lg tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent">
-                  Mistus AV Merger
-                </span>
-                <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                  v0.5.0
-                </span>
+                <span className="nb-title text-base">Mistus AV Merger</span>
               </div>
-              <p className="text-xs text-slate-400 hidden sm:block">
-                Portable Looping Audio-Video Combiner
-              </p>
+              <p className="nb-sub font-bold hidden sm:block">Loop Audio + Video, Fast</p>
             </div>
           </div>
 
           {/* Navigation Tabs */}
-          <nav className="flex items-center gap-1 bg-slate-950/60 p-1 rounded-xl border border-slate-800/80">
-            <button
-              onClick={() => setActiveTab('single')}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                activeTab === 'single'
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-              }`}
-            >
-              <Film className="w-4 h-4" />
-              <span>Single Render</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('bulk')}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                activeTab === 'bulk'
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-              }`}
-            >
-              <Sliders className="w-4 h-4" />
-              <span>Bulk Auto-Pair</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('effects')}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                activeTab === 'effects'
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-              }`}
-            >
-              <Sparkles className="w-4 h-4" />
-              <span>VHS & Night FX</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('queue')}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all relative ${
-                activeTab === 'queue'
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-              }`}
-            >
-              <ListOrdered className="w-4 h-4" />
-              <span>Job Queue</span>
-              {queueCount > 0 && (
-                <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
-                  activeJobsCount > 0 ? 'bg-amber-500 text-black animate-pulse' : 'bg-slate-700 text-slate-200'
-                }`}>
-                  {queueCount}
-                </span>
-              )}
-            </button>
+          <nav className="flex items-stretch gap-0 border-[3px] border-black divide-x-[3px] divide-black overflow-hidden">
+            {TABS.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`relative flex items-center gap-2 px-3.5 py-2.5 text-xs font-black uppercase transition-colors ${
+                  activeTab === tab.id ? tab.color : 'bg-white hover:bg-[#f4efe7]'
+                }`}
+              >
+                {tab.icon}
+                <span className="hidden md:inline">{tab.label}</span>
+                {tab.id === 'queue' && queueCount > 0 && (
+                  <span
+                    className={`absolute -top-2 -right-2 text-[10px] font-black px-1.5 py-0 border-2 border-black ${
+                      activeJobsCount > 0 ? 'bg-red-400 animate-pulse' : 'bg-black text-white'
+                    }`}
+                  >
+                    {queueCount}
+                  </span>
+                )}
+              </button>
+            ))}
           </nav>
 
           {/* Hardware & System Actions */}
-          <div className="flex items-center gap-2">
-            {/* GPU Badge */}
-            <div 
+          <div className="flex items-center gap-2 shrink-0">
+            <div
               onClick={onOpenSettings}
-              className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-950/40 border border-emerald-500/20 text-emerald-400 text-xs font-mono cursor-pointer hover:bg-emerald-900/30 transition-colors"
+              className="hidden lg:flex items-center gap-1.5 nb-badge nb-badge-lime cursor-pointer"
               title="Click to configure hardware encoders"
             >
-              <Cpu className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="truncate max-w-[140px]">{gpuName}</span>
+              <Cpu className="w-3.5 h-3.5" />
+              <span className="truncate max-w-[140px] font-mono">{gpuName}</span>
             </div>
 
-            <button
-              onClick={onOpenDiagnostics}
-              title="Copy Diagnostics"
-              className="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-colors"
-              aria-label="Open Diagnostics"
-            >
+            <button onClick={onOpenDiagnostics} title="Copy Diagnostics" aria-label="Open Diagnostics"
+              className="nb-btn nb-btn-sm nb-btn-white nb-press p-2">
               <Activity className="w-4 h-4" />
             </button>
 
-            <button
-              onClick={onOpenSettings}
-              title="Application Settings"
-              className="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-colors"
-              aria-label="Open Settings"
-            >
+            <button onClick={onOpenSettings} title="Application Settings" aria-label="Open Settings"
+              className="nb-btn nb-btn-sm nb-btn-white nb-press p-2">
               <SettingsIcon className="w-4 h-4" />
             </button>
 
-            <button
-              onClick={onOpenAbout}
-              title="About Mistus AV Merger"
-              className="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-colors"
-              aria-label="About Application"
-            >
+            <button onClick={onOpenAbout} title="About Mistus AV Merger" aria-label="About"
+              className="nb-btn nb-btn-sm nb-btn-white nb-press p-2">
               <Info className="w-4 h-4" />
             </button>
 
-            <button
-              onClick={onQuit}
-              title="Quit Application Server"
-              className="p-2 text-rose-400 hover:text-rose-200 hover:bg-rose-950/40 rounded-lg transition-colors border border-transparent hover:border-rose-900/50"
-              aria-label="Quit App"
-            >
+            <button onClick={onQuit} title="Quit Application Server" aria-label="Quit"
+              className="nb-btn nb-btn-sm nb-press p-2 bg-red-400 text-black">
               <Power className="w-4 h-4" />
             </button>
           </div>

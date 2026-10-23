@@ -223,14 +223,12 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       {/* Intro Header */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="nb-card p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h3 className="font-semibold text-slate-100 text-sm flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-indigo-400" />
-            <span>Visual Effects, VHS Presets & Night Mode</span>
-          </h3>
-          <p className="text-xs text-slate-400 mt-1">
-            Re-encode visual pipeline built entirely with FFmpeg filters (noise, chromashift, gblur, curves, vignette, scanlines).
+          <div className="nb-stripe h-2 w-24 mb-2" />
+          <h3 className="nb-title text-xl">Visual FX &amp; VHS Studio</h3>
+          <p className="nb-sub font-semibold mt-1">
+            Built entirely with FFmpeg filters (noise, chromashift, gblur, curves, vignette, scanlines).
           </p>
         </div>
 
@@ -241,29 +239,24 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
             setStaticBursts(false);
             setOverlayEnabled(false);
           }}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors cursor-pointer"
+          className="nb-btn nb-btn-pink nb-press"
         >
-          <RotateCcw className="w-3.5 h-3.5" />
-          <span>Reset All Effects</span>
+          <RotateCcw className="w-3.5 h-3.5" /> Reset All
         </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Left: Interactive Canvas Live Preview */}
+        {/* Left: Live Canvas Monitor */}
         <div className="lg:col-span-6 space-y-4">
-          <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 shadow-inner relative overflow-hidden">
-            <div className="flex items-center justify-between mb-3 px-1">
-              <span className="text-xs font-medium text-slate-300 flex items-center gap-1.5">
-                <Tv className="w-4 h-4 text-indigo-400" />
-                <span>Simulated Output Live Monitor</span>
+          <div className="nb-card p-4">
+            <div className="flex items-center justify-between mb-3">
+              <span className="nb-label flex items-center gap-1.5">
+                <Tv className="w-4 h-4" /> Simulated Output
               </span>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-500/20">
-                Live 60fps WebGL/Canvas
-              </span>
+              <span className="nb-badge nb-badge-lime">Canvas 60fps</span>
             </div>
 
-            {/* Canvas Monitor */}
-            <div className="relative aspect-video rounded-xl overflow-hidden bg-black border border-slate-800 flex items-center justify-center">
+            <div className="border-[3px] border-black bg-black flex items-center justify-center overflow-hidden">
               <canvas
                 ref={canvasRef}
                 width={560}
@@ -272,34 +265,32 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
               />
             </div>
 
-            <div className="mt-3 flex items-center justify-between text-[11px] text-slate-400 font-mono px-1">
-              <span>Preset: <strong className="text-indigo-400">{activePreset.name}</strong></span>
-              <span>Night Mode: <strong className={nightMode ? 'text-cyan-400' : 'text-slate-500'}>{nightMode ? 'ON' : 'OFF'}</strong></span>
-              <span>Noise Seed: <strong className="text-amber-400">#{noiseSeed}</strong></span>
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] font-mono font-bold">
+              <span className="nb-badge nb-badge-yellow">Preset: {activePreset.name}</span>
+              <span className={`nb-badge ${nightMode ? 'nb-badge-cyan' : ''}`}>Night: {nightMode ? 'ON' : 'OFF'}</span>
+              <span className="nb-badge">Seed: #{noiseSeed}</span>
             </div>
           </div>
 
           {/* Filtergraph Inspector */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-2">
-            <div className="flex items-center gap-2 text-xs font-medium text-slate-300">
-              <Code2 className="w-4 h-4 text-indigo-400" />
-              <span>Compiled FFmpeg -vf Filtergraph</span>
+          <div className="nb-card p-5 space-y-2">
+            <div className="nb-label flex items-center gap-2">
+              <Code2 className="w-4 h-4" /> Compiled FFmpeg -vf Filtergraph
             </div>
-            <div className="bg-slate-950 rounded-xl p-3 border border-slate-800/80 font-mono text-[11px] text-indigo-300 break-all select-all">
-              {activePreset.filtergraph || 'No filter (Stream copy mode candidate)'}
+            <div className="bg-[#111] text-yellow-300 border-[3px] border-black p-3 font-mono text-[11px] break-all select-all">
+              {activePreset.filtergraph || 'No filter (stream copy candidate)'}
               {nightMode && ',eq=contrast=1.1:brightness=-0.08,curves=all=\'0/0 0.5/0.4 1/0.95\':blue=\'0/0 0.5/0.58 1/1\',vignette=PI/4'}
               {staticBursts && `,noise=alls=15:allf=t+u:seed=${noiseSeed}`}
             </div>
           </div>
         </div>
 
-        {/* Right: Controls & Presets */}
+        {/* Right: Controls */}
         <div className="lg:col-span-6 space-y-6">
-          {/* Preset Selector */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-sm space-y-4">
-            <h4 className="font-semibold text-slate-100 text-sm flex items-center gap-2">
-              <Tv className="w-4 h-4 text-indigo-400" />
-              <span>VHS Style Presets</span>
+          {/* Presets */}
+          <div className="nb-card p-6 space-y-4">
+            <h4 className="nb-title text-sm flex items-center gap-2">
+              <Tv className="w-4 h-4" /> VHS Style Presets
             </h4>
 
             <div className="grid grid-cols-2 gap-2">
@@ -307,144 +298,110 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
                 <button
                   key={preset.id}
                   onClick={() => setSelectedPresetId(preset.id)}
-                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                    selectedPresetId === preset.id
-                      ? 'bg-indigo-600/15 border-indigo-500 text-white shadow-sm'
-                      : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200'
+                  className={`border-[3px] border-black p-3 text-left nb-press ${
+                    selectedPresetId === preset.id ? 'bg-yellow-300' : 'bg-white hover:bg-lime-100'
                   }`}
                 >
-                  <div className="text-xs font-semibold">{preset.name}</div>
-                  <div className="text-[10px] text-slate-400 mt-1 line-clamp-2">{preset.description}</div>
+                  <div className="text-xs font-black">{preset.name}</div>
+                  <div className="text-[10px] font-semibold text-black/60 mt-1 line-clamp-2">{preset.description}</div>
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Night Mode & Color Grading */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-sm space-y-4">
+          {/* Night Mode */}
+          <div className="nb-card p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <h4 className="font-semibold text-slate-100 text-sm flex items-center gap-2">
-                <Moon className="w-4 h-4 text-cyan-400" />
-                <span>Night Mode Grade</span>
+              <h4 className="nb-title text-sm flex items-center gap-2">
+                <Moon className="w-4 h-4" /> Night Mode
               </h4>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={nightMode}
-                  onChange={e => setNightMode(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-600"></div>
-              </label>
+              <input
+                type="checkbox"
+                className="nb-check"
+                checked={nightMode}
+                onChange={e => setNightMode(e.target.checked)}
+                aria-label="Night mode"
+              />
             </div>
 
             {nightMode && (
-              <div className="space-y-4 pt-2">
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-xs text-slate-300">
-                    <span>Night Grade Intensity (Cool tint + Vignette)</span>
-                    <span className="font-mono text-cyan-400">{Math.round(nightIntensity * 100)}%</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0.1"
-                    max="1.0"
-                    step="0.05"
-                    value={nightIntensity}
-                    onChange={e => setNightIntensity(parseFloat(e.target.value))}
-                    className="w-full accent-cyan-500"
-                  />
+              <div className="space-y-1.5 pt-2">
+                <div className="flex justify-between text-xs font-bold">
+                  <span>Intensity</span>
+                  <span className="font-mono border-2 border-black bg-cyan-300 px-1">{Math.round(nightIntensity * 100)}%</span>
                 </div>
+                <input
+                  type="range" min="0.1" max="1.0" step="0.05" value={nightIntensity}
+                  onChange={e => setNightIntensity(parseFloat(e.target.value))}
+                  className="nb-range w-full"
+                />
               </div>
             )}
           </div>
 
-          {/* Noise, Grain & Static Generator */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-sm space-y-4">
-            <h4 className="font-semibold text-slate-100 text-sm flex items-center gap-2">
-              <Activity className="w-4 h-4 text-amber-400" />
-              <span>Noise & Static Synthesis</span>
+          {/* Noise & Static */}
+          <div className="nb-card p-6 space-y-4">
+            <h4 className="nb-title text-sm flex items-center gap-2">
+              <Activity className="w-4 h-4" /> Noise &amp; Static
             </h4>
 
             <div className="space-y-3">
               <div className="space-y-1.5">
-                <div className="flex justify-between text-xs text-slate-300">
-                  <span>Film Grain Level</span>
-                  <span className="font-mono text-amber-400">{noiseGrain}%</span>
+                <div className="flex justify-between text-xs font-bold">
+                  <span>Film Grain</span>
+                  <span className="font-mono border-2 border-black bg-yellow-300 px-1">{noiseGrain}%</span>
                 </div>
                 <input
-                  type="range"
-                  min="0"
-                  max="60"
-                  value={noiseGrain}
+                  type="range" min="0" max="60" value={noiseGrain}
                   onChange={e => setNoiseGrain(parseInt(e.target.value, 10))}
-                  className="w-full accent-amber-500"
+                  className="nb-range w-full"
                 />
               </div>
 
-              <div className="flex items-center justify-between pt-2">
-                <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300">
-                  <input
-                    type="checkbox"
-                    checked={staticBursts}
-                    onChange={e => setStaticBursts(e.target.checked)}
-                    className="rounded border-slate-700 bg-slate-950 text-amber-600 focus:ring-0"
-                  />
-                  <span>Periodic Static Snow Bursts & Transport Flutter</span>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2">
+                <label className="flex items-center gap-2 cursor-pointer text-xs font-bold">
+                  <input type="checkbox" className="nb-check" checked={staticBursts}
+                    onChange={e => setStaticBursts(e.target.checked)} />
+                  <span>Static snow bursts</span>
                 </label>
 
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px] text-slate-400">RNG Seed:</span>
+                  <span className="nb-label">Seed</span>
                   <input
-                    type="number"
-                    value={noiseSeed}
+                    type="number" value={noiseSeed}
                     onChange={e => setNoiseSeed(parseInt(e.target.value, 10) || 0)}
-                    className="w-20 bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs font-mono text-amber-400"
+                    className="nb-input w-20 font-mono"
                   />
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Graphic Overlay / OSD */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-sm space-y-4">
+          {/* OSD Overlay */}
+          <div className="nb-card p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <h4 className="font-semibold text-slate-100 text-sm flex items-center gap-2">
-                <ImageIcon className="w-4 h-4 text-pink-400" />
-                <span>On-Screen Display / Overlay</span>
+              <h4 className="nb-title text-sm flex items-center gap-2">
+                <ImageIcon className="w-4 h-4" /> VCR On-Screen Display
               </h4>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={overlayEnabled}
-                  onChange={e => setOverlayEnabled(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-pink-600"></div>
-              </label>
+              <input
+                type="checkbox" className="nb-check" checked={overlayEnabled}
+                onChange={e => setOverlayEnabled(e.target.checked)}
+                aria-label="Overlay"
+              />
             </div>
 
             {overlayEnabled && (
-              <div className="space-y-3 pt-2">
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-xs text-slate-300">
-                    <span>Overlay Opacity</span>
-                    <span className="font-mono text-pink-400">{Math.round(overlayOpacity * 100)}%</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0.1"
-                    max="1.0"
-                    step="0.05"
-                    value={overlayOpacity}
-                    onChange={e => setOverlayOpacity(parseFloat(e.target.value))}
-                    className="w-full accent-pink-500"
-                  />
+              <div className="space-y-1.5 pt-2">
+                <div className="flex justify-between text-xs font-bold">
+                  <span>Opacity</span>
+                  <span className="font-mono border-2 border-black bg-pink-300 px-1">{Math.round(overlayOpacity * 100)}%</span>
                 </div>
-
-                <div className="text-xs text-slate-400">
-                  <span>Simulates 1990s VCR OSD timestamp and tape transport head indicator.</span>
-                </div>
+                <input
+                  type="range" min="0.1" max="1.0" step="0.05" value={overlayOpacity}
+                  onChange={e => setOverlayOpacity(parseFloat(e.target.value))}
+                  className="nb-range w-full"
+                />
+                <p className="nb-sub font-semibold">Simulates a 1990s VCR timestamp overlay.</p>
               </div>
             )}
           </div>

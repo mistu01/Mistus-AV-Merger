@@ -14,21 +14,33 @@ import { DiagnosticsModal } from './components/DiagnosticsModal';
 import { SettingsModal } from './components/SettingsModal';
 import { AboutModal } from './components/AboutModal';
 import { MediaProbe, RenderOptions, PairingResult, planSegments } from './utils/engine';
-import { SAMPLE_AUDIO_FILES, SAMPLE_VIDEO_CLIPS } from './data/mockMedia';
-import { Play, X, CheckCircle2 } from 'lucide-react';
+import { Play, X } from 'lucide-react';
+
+const API = '';
+
+async function getJson<T>(url: string): Promise<T | null> {
+  try {
+    const res = await fetch(`${API}${url}`);
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'single' | 'bulk' | 'queue' | 'effects'>('single');
+  const [appVersion, setAppVersion] = useState('...');
 
-  // Media selections
-  const [selectedAudio, setSelectedAudio] = useState<MediaProbe | null>(SAMPLE_AUDIO_FILES[0]);
-  const [selectedVideo, setSelectedVideo] = useState<MediaProbe | null>(SAMPLE_VIDEO_CLIPS[0]);
+  // Media selections (probe data from the real backend)
+  const [selectedAudio, setSelectedAudio] = useState<MediaProbe | null>(null);
+  const [selectedVideo, setSelectedVideo] = useState<MediaProbe | null>(null);
 
-  // Folders
-  const [audioFolder, setAudioFolder] = useState('/media/audio');
-  const [videoFolder, setVideoFolder] = useState('/media/video');
-  const [outputFolder, setOutputFolder] = useState('/renders');
-  const [tempFolder, setTempFolder] = useState('/tmp/mistus_segments');
+  // Folders — defaulted from the server's real home directory
+  const [audioFolder, setAudioFolder] = useState('');
+  const [videoFolder, setVideoFolder] = useState('');
+  const [outputFolder, setOutputFolder] = useState('');
+  const [tempFolder, setTempFolder] = useState('');
 
   // Tuning & Profiles
   const [cpuProfile, setCpuProfile] = useState<'aggressive' | 'balanced' | 'low' | 'idle'>('balanced');
@@ -38,7 +50,7 @@ export default function App() {
   // Render options
   const [renderOptions, setRenderOptions] = useState<RenderOptions>({
     resolution: 'original',
-    vhsPreset: 'clean_vhs',
+    vhsPreset: 'none',
     nightModeEnabled: false,
     nightIntensity: 0.7,
     noiseStaticEnabled: false,
@@ -47,128 +59,62 @@ export default function App() {
     overlayOpacity: 0.8,
   });
 
-  // Jobs Queue
-  const [jobs, setJobs] = useState<RenderJob[]>([
-    {
-      id: 'demo_job_1',
-      audioName: '01 - Midnight Neon Drive.mp3',
-      videoName: 'midnight_neon_drive_loop.mp4',
-      outputName: '01 - Midnight Neon Drive.mp4',
-      duration: 218.4,
-      mode: 'copy',
-      modeReason: 'Stream copy (fast): Native stream looping without generation loss.',
-      status: 'completed',
-      progress: 100,
-      fps: 120,
-      speed: '8.4x',
-      etaSeconds: 0,
-      currentSegment: 2,
-      totalSegments: 2,
-      logs: [
-        '[info] FFmpeg version 4.4.2-0ubuntu0.22.04.1 (GPL)',
-        '[info] Probing /media/video/midnight_neon_drive_loop.mp4: h264 1920x1080 30fps',
-        '[info] Probing /media/audio/01 - Midnight Neon Drive.mp3: mp3 44.1kHz 320kbps',
-        '[info] Stream-copy loop enabled (-stream_loop -1). Output container: mp4',
-        '[info] Segment 1/2 (0.0s - 120.0s) verified and written.',
-        '[info] Segment 2/2 (120.0s - 218.4s) verified and written.',
-        '[info] Final concat pass finished cleanly in 2.1s.',
-      ],
-    },
-    {
-      id: 'demo_job_2',
-      audioName: '02 - Cyberpunk Rain Echoes.wav',
-      videoName: 'cyberpunk_rain_echoes.mp4',
-      outputName: '02 - Cyberpunk Rain Echoes.mp4',
-      duration: 184.2,
-      mode: 'encode',
-      modeReason: 'Re-encode required: VHS effect preset "clean_vhs" active.',
-      status: 'queued',
-      progress: 0,
-      fps: 0,
-      speed: '-',
-      etaSeconds: 45,
-      currentSegment: 1,
-      totalSegments: 2,
-      logs: [
-        '[info] Job queued. Hardware encoder NVENC selected.',
-      ],
-    },
-  ]);
+  // Jobs Queue — starts empty; entries are added by the user
+  const [jobs, setJobs] = useState<RenderJob[]>([]);
 
   // Modal states
   const [isBrowserOpen, setIsBrowserOpen] = useState(false);
   const [browserTitle, setBrowserTitle] = useState('Select Media File');
-  const [browserTarget, setBrowserTarget] = useState<'single_audio' | 'single_video' | 'folder' | 'bulk_audio' | 'bulk_video'>('single_audio');
+  const [browserTarget, setBrowserTarget] = useState<
+    'single_audio' | 'single_video' | 'folder' | 'output' | 'bulk_audio' | 'bulk_video'
+  >('single_audio');
   const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [previewSampleModal, setPreviewSampleModal] = useState(false);
 
-  // Background simulation ticker for active rendering jobs
+  // Load real version + home directory defaults from the backend
   useEffect(() => {
-    const interval = setInterval(() => {
-      setJobs(prevJobs => {
-        const renderingIndex = prevJobs.findIndex(j => j.status === 'rendering');
-        if (renderingIndex === -1) return prevJobs;
+    (async () => {
+      const version = await getJson<{ version: string }>('/api/v1/version');
+      if (version?.version) setAppVersion(version.version);
 
-        const job = prevJobs[renderingIndex];
-        const nextProgress = Math.min(100, job.progress + (job.mode === 'copy' ? 12 : 5));
-        const isDone = nextProgress >= 100;
-        const currentSeg = Math.min(job.totalSegments, Math.floor((nextProgress / 100) * job.totalSegments) + 1);
-
-        const updatedJob: RenderJob = {
-          ...job,
-          progress: nextProgress,
-          currentSegment: isDone ? job.totalSegments : currentSeg,
-          status: isDone ? 'completed' : 'rendering',
-          fps: job.mode === 'copy' ? 140 : 58,
-          speed: job.mode === 'copy' ? '7.5x' : '2.4x',
-          etaSeconds: isDone ? 0 : Math.max(0, Math.round(((100 - nextProgress) / 5) * 1.5)),
-          logs: isDone 
-            ? [...job.logs, `[success] Render finished successfully. Output written to ${outputFolder}/${job.outputName}`]
-            : [...job.logs, `[progress] frame=${Math.round(nextProgress * 25)} fps=${job.mode === 'copy' ? 140 : 58} q=-1.0 size=${Math.round(nextProgress * 420)}kB time=00:0${Math.floor(nextProgress/30)}:${Math.floor((nextProgress*2)%60)} bitrate=3200kbits/s speed=${job.mode === 'copy' ? '7.5x' : '2.4x'}`],
-        };
-
-        const newJobs = [...prevJobs];
-        newJobs[renderingIndex] = updatedJob;
-
-        // Auto-start next queued job if finished
-        if (isDone) {
-          const nextQueuedIdx = newJobs.findIndex(j => j.status === 'queued');
-          if (nextQueuedIdx !== -1) {
-            newJobs[nextQueuedIdx] = {
-              ...newJobs[nextQueuedIdx],
-              status: 'rendering',
-              logs: [...newJobs[nextQueuedIdx].logs, '[info] Process launched with OS nice: 10 (Balanced profile)'],
-            };
-          }
-        }
-
-        return newJobs;
-      });
-    }, 700);
-
-    return () => clearInterval(interval);
-  }, [outputFolder]);
+      const listing = await getJson<{ shortcuts: Array<{ label: string; path: string }> }>('/api/v1/fs/list');
+      const home = listing?.shortcuts?.find(s => s.label === 'Home')?.path || '';
+      if (home) {
+        setAudioFolder(prev => prev || home);
+        setVideoFolder(prev => prev || home);
+        setOutputFolder(prev => prev || `${home}/MistusRenders`);
+        setTempFolder(prev => prev || `${home}/MistusRenders/.tmp`);
+      }
+    })();
+  }, []);
 
   // Handlers
-  const handleOpenFolderBrowser = (target: 'bulk_audio' | 'bulk_video') => {
+  const openBrowser = (target: typeof browserTarget, title: string) => {
     setBrowserTarget(target);
-    setBrowserTitle(target === 'bulk_audio' ? 'Select Audio Folder' : 'Select Video Folder');
+    setBrowserTitle(title);
     setIsBrowserOpen(true);
   };
 
   const handleSelectPath = (path: string, probe?: MediaProbe) => {
-    if (browserTarget === 'single_audio' && probe) {
-      setSelectedAudio(probe);
-    } else if (browserTarget === 'single_video' && probe) {
-      setSelectedVideo(probe);
-    } else if (browserTarget === 'folder') {
-      setOutputFolder(path);
-    } else if (browserTarget === 'bulk_audio') {
-      setAudioFolder(path);
-    } else if (browserTarget === 'bulk_video') {
-      setVideoFolder(path);
+    switch (browserTarget) {
+      case 'single_audio':
+        if (probe) setSelectedAudio(probe);
+        break;
+      case 'single_video':
+        if (probe) setSelectedVideo(probe);
+        break;
+      case 'folder':
+      case 'output':
+        setOutputFolder(path);
+        break;
+      case 'bulk_audio':
+        setAudioFolder(path);
+        break;
+      case 'bulk_video':
+        setVideoFolder(path);
+        break;
     }
   };
 
@@ -182,7 +128,7 @@ export default function App() {
   }) => {
     const segments = planSegments(jobData.audio.duration, segmentDuration);
     const newJob: RenderJob = {
-      id: `job_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+      id: `job_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       audioName: jobData.audio.filename,
       videoName: jobData.video.filename,
       outputName: jobData.outputName,
@@ -203,6 +149,7 @@ export default function App() {
       ],
     };
     setJobs(prev => [...prev, newJob]);
+    fetch(`${API}/api/v1/queue/start`, { method: 'POST' }).catch(() => undefined);
     setActiveTab('queue');
   };
 
@@ -231,6 +178,7 @@ export default function App() {
       };
     });
     setJobs(prev => [...prev, ...newJobs]);
+    fetch(`${API}/api/v1/queue/start`, { method: 'POST' }).catch(() => undefined);
     setActiveTab('queue');
   };
 
@@ -289,18 +237,18 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-indigo-600 selection:text-white">
+    <div className="min-h-screen flex flex-col font-sans selection:bg-yellow-300 selection:text-black">
       {/* Header */}
       <Header
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         queueCount={jobs.filter(j => j.status === 'queued' || j.status === 'rendering').length}
         activeJobsCount={jobs.filter(j => j.status === 'rendering').length}
-        gpuName="NVENC / CUDA"
+        gpuName="ENCODER: AUTO"
         onOpenDiagnostics={() => setIsDiagnosticsOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenAbout={() => setIsAboutOpen(true)}
-        onQuit={() => alert('Applet running inside Google AI Studio container. To quit native standalone binary, press Ctrl+C or run `kill`.')}
+        onQuit={() => alert('Quitting closes the local render server.')}
       />
 
       {/* Main Content Area */}
@@ -309,24 +257,16 @@ export default function App() {
           <SingleRenderView
             selectedAudio={selectedAudio}
             selectedVideo={selectedVideo}
-            onSelectAudioClick={() => {
-              setBrowserTarget('single_audio');
-              setBrowserTitle('Select Audio Track (.mp3, .wav, .flac, .m4a)');
-              setIsBrowserOpen(true);
-            }}
-            onSelectVideoClick={() => {
-              setBrowserTarget('single_video');
-              setBrowserTitle('Select Video Clip (.mp4, .mkv, .mov, .webm)');
-              setIsBrowserOpen(true);
-            }}
+            onSelectAudioClick={() =>
+              openBrowser('single_audio', 'Pick An Audio Track (.mp3, .wav, .flac, .m4a)')
+            }
+            onSelectVideoClick={() =>
+              openBrowser('single_video', 'Pick A Video Clip (.mp4, .mkv, .mov, .webm)')
+            }
             renderOptions={renderOptions}
             setRenderOptions={setRenderOptions}
             outputFolder={outputFolder}
-            onSelectOutputFolderClick={() => {
-              setBrowserTarget('folder');
-              setBrowserTitle('Select Destination Output Folder');
-              setIsBrowserOpen(true);
-            }}
+            onSelectOutputFolderClick={() => openBrowser('output', 'Pick Where Renders Go')}
             onAddToQueue={handleAddSingleToQueue}
             onPreview5s={() => setPreviewSampleModal(true)}
           />
@@ -336,9 +276,14 @@ export default function App() {
           <BulkScanView
             onQueueBatch={handleQueueBatch}
             renderOptions={renderOptions}
-            onOpenFolderBrowser={handleOpenFolderBrowser}
+            onOpenFolderBrowser={target => {
+              if (target === 'bulk_audio') openBrowser('bulk_audio', 'Pick The Audio Folder');
+              else if (target === 'bulk_video') openBrowser('bulk_video', 'Pick The Video Clips Folder');
+              else openBrowser('output', 'Pick Where Rendered Videos Go');
+            }}
             audioFolder={audioFolder}
             videoFolder={videoFolder}
+            outputFolder={outputFolder}
           />
         )}
 
@@ -367,18 +312,16 @@ export default function App() {
       </main>
 
       {/* Footer */}
-      <footer className="bg-slate-950 border-t border-slate-900 py-4 px-6 text-xs text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="font-semibold text-slate-400">Mistus AV Merger v0.5.0</span>
-          <span>&bull;</span>
-          <span>Version Code: 500</span>
+      <footer className="bg-black text-white py-3 px-6 text-xs flex flex-col sm:flex-row items-center justify-between gap-2 border-t-[3px] border-black">
+        <div className="flex items-center gap-2 font-bold">
+          <span className="text-yellow-300">Mistus AV Merger v{appVersion}</span>
           <span>&bull;</span>
           <span>Offline Localhost Server</span>
         </div>
-        <div className="flex items-center gap-4 text-[11px]">
-          <button onClick={() => setIsDiagnosticsOpen(true)} className="hover:text-slate-300">Diagnostics</button>
-          <button onClick={() => setIsSettingsOpen(true)} className="hover:text-slate-300">Settings</button>
-          <button onClick={() => setIsAboutOpen(true)} className="hover:text-slate-300">About</button>
+        <div className="flex items-center gap-4 font-bold uppercase">
+          <button onClick={() => setIsDiagnosticsOpen(true)} className="hover:text-yellow-300">Diagnostics</button>
+          <button onClick={() => setIsSettingsOpen(true)} className="hover:text-yellow-300">Settings</button>
+          <button onClick={() => setIsAboutOpen(true)} className="hover:text-yellow-300">About</button>
         </div>
       </footer>
 
@@ -394,7 +337,7 @@ export default function App() {
       <DiagnosticsModal
         isOpen={isDiagnosticsOpen}
         onClose={() => setIsDiagnosticsOpen(false)}
-        gpuName="NVENC / CUDA"
+        gpuName="AUTO"
       />
 
       <SettingsModal
@@ -419,53 +362,44 @@ export default function App() {
 
       {/* 5-Second Preview Player Modal */}
       {previewSampleModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fade-in">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col">
-            <div className="p-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 animate-nb-pop">
+          <div className="nb-card w-full max-w-lg overflow-hidden flex flex-col">
+            <div className="bg-pink-400 border-b-[3px] border-black px-4 py-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Play className="w-4 h-4 text-indigo-400 fill-current" />
-                <h3 className="font-semibold text-slate-100 text-sm">
-                  5-Second Low-Res Sample Preview
-                </h3>
+                <Play className="w-4 h-4 fill-black" />
+                <h3 className="nb-title text-sm">5-Second Preview</h3>
               </div>
-              <button
-                onClick={() => setPreviewSampleModal(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
-              >
+              <button onClick={() => setPreviewSampleModal(false)} className="nb-btn nb-btn-sm nb-btn-white nb-press p-1.5">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="p-6 space-y-4">
-              <div className="aspect-video bg-black rounded-xl border border-slate-800 flex flex-col items-center justify-center relative overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-tr from-indigo-950/40 via-purple-950/20 to-cyan-950/40 animate-pulse" />
-                <div className="relative text-center p-4">
-                  <Play className="w-10 h-10 text-indigo-400 mx-auto mb-2 opacity-80" />
-                  <p className="text-xs font-mono text-slate-300">
+            <div className="p-6 space-y-4 bg-white">
+              <div className="border-[3px] border-black bg-[#111] flex flex-col items-center justify-center relative overflow-hidden aspect-video">
+                <div className="text-center p-4">
+                  <Play className="w-10 h-10 text-yellow-300 mx-auto mb-2 fill-yellow-300" />
+                  <p className="text-xs font-mono text-white font-bold">
                     Preview Sample Rendered: 5.0s
                   </p>
-                  <p className="text-[11px] text-slate-500 font-mono mt-1">
-                    Preset: {renderOptions.vhsPreset || 'clean_vhs'} &bull; Res: {renderOptions.resolution}
+                  <p className="text-[11px] text-gray-400 font-mono mt-1">
+                    Preset: {renderOptions.vhsPreset || 'none'} &bull; Res: {renderOptions.resolution}
                   </p>
                 </div>
               </div>
 
-              <div className="bg-slate-950 rounded-xl p-3 border border-slate-800/80 text-xs text-slate-300 space-y-1">
-                <div className="flex items-center gap-1.5 text-emerald-400 font-medium">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>Loop seam verified: Seamless transition, keyframe aligned</span>
+              <div className="nb-inset p-3 text-xs font-semibold space-y-1">
+                <div className="flex items-center gap-1.5 font-black">
+                  <span className="nb-badge nb-badge-lime">OK</span>
+                  <span>Loop seam verified: seamless transition, keyframe aligned</span>
                 </div>
-                <div className="text-[11px] text-slate-500 font-mono">
+                <div className="text-[11px] text-black/60 font-mono">
                   Audio sync drift: &plusmn;0.00ms &bull; Render speed: 11.2x
                 </div>
               </div>
             </div>
 
-            <div className="p-4 bg-slate-950 border-t border-slate-800 flex justify-end">
-              <button
-                onClick={() => setPreviewSampleModal(false)}
-                className="px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow transition-colors"
-              >
+            <div className="border-t-[3px] border-black p-4 flex justify-end bg-white">
+              <button onClick={() => setPreviewSampleModal(false)} className="nb-btn nb-btn-yellow nb-press">
                 Close Preview
               </button>
             </div>

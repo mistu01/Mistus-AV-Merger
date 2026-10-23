@@ -1,1 +1,278 @@
 @import "tailwindcss";
+
+/* ============================================================
+   Mistus AV Merger — Neobrutalist Design System
+   Thick black borders, hard offset shadows, saturated color blocks.
+   ============================================================ */
+
+:root {
+  --nb-paper: #f4efe7;
+  --nb-shadow-lg: 6px 6px 0 #000;
+  --nb-shadow-sm: 4px 4px 0 #000;
+  --nb-shadow-xs: 3px 3px 0 #000;
+}
+
+body {
+  background-color: var(--nb-paper);
+  background-image: radial-gradient(#00000012 1px, transparent 1px);
+  background-size: 22px 22px;
+  color: #111;
+  font-family: "Segoe UI", Inter, system-ui, -apple-system, sans-serif;
+}
+
+/* Chunky display type */
+.nb-title {
+  font-family: "Arial Black", "Segoe UI Black", Inter, system-ui, sans-serif;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+}
+
+/* ---------- Surfaces ---------- */
+
+.nb-card {
+  background: #fff;
+  border: 3px solid #000;
+  box-shadow: var(--nb-shadow-lg);
+}
+
+.nb-card-flat {
+  background: #fff;
+  border: 3px solid #000;
+}
+
+.nb-inset {
+  background: #faf7f1;
+  border: 2px solid #000;
+}
+
+/* Anything with .nb-press presses in on click */
+.nb-press {
+  transition: transform 80ms ease, box-shadow 80ms ease;
+}
+.nb-press:hover {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 #000;
+}
+.nb-press:active {
+  transform: translate(var(--nb-shadow-xs-press, 6px), var(--nb-shadow-xs-press, 6px));
+  box-shadow: 0 0 0 #000;
+}
+
+/* ---------- Buttons ---------- */
+
+.nb-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border: 3px solid #000;
+  box-shadow: var(--nb-shadow-sm);
+  font-weight: 800;
+  color: #000;
+  padding: 0.55rem 1rem;
+  font-size: 0.8rem;
+  text-transform: none;
+  cursor: pointer;
+  user-select: none;
+}
+
+.nb-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: var(--nb-shadow-xs);
+}
+
+.nb-btn:disabled:hover {
+  transform: none;
+  box-shadow: var(--nb-shadow-xs);
+}
+
+.nb-btn-yellow { background: #ffd400; }
+.nb-btn-pink   { background: #ff5d8f; }
+.nb-btn-lime   { background: #a6f750; }
+.nb-btn-cyan   { background: #54e6e6; }
+.nb-btn-purple { background: #c4a7ff; }
+.nb-btn-white  { background: #ffffff; }
+.nb-btn-black  { background: #111; color: #fff; box-shadow: 4px 4px 0 #ffd400; }
+
+.nb-btn-sm { padding: 0.3rem 0.6rem; font-size: 0.7rem; box-shadow: var(--nb-shadow-xs); border-width: 2px; }
+.nb-btn-lg { padding: 0.8rem 1.5rem; font-size: 0.95rem; }
+
+/* ---------- Inputs ---------- */
+
+.nb-input {
+  background: #fff;
+  border: 3px solid #000;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8rem;
+  color: #111;
+  outline: none;
+}
+
+.nb-input:focus {
+  box-shadow: var(--nb-shadow-sm);
+}
+
+.nb-input-readonly {
+  background: #f1ede4;
+  color: #333;
+}
+
+.nb-select {
+  background: #fff;
+  border: 3px solid #000;
+  padding: 0.5rem 0.6rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #111;
+  outline: none;
+  cursor: pointer;
+}
+
+.nb-select:focus { box-shadow: var(--nb-shadow-sm); }
+
+input[type="checkbox"].nb-check {
+  appearance: none;
+  width: 1.15rem;
+  height: 1.15rem;
+  background: #fff;
+  border: 3px solid #000;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: inline-grid;
+  place-content: center;
+}
+
+input[type="checkbox"].nb-check::before {
+  content: "";
+  width: 0.6rem;
+  height: 0.6rem;
+  background: #ff5d8f;
+  transform: scale(0);
+  transition: transform 90ms ease;
+}
+
+input[type="checkbox"].nb-check:checked::before {
+  transform: scale(1);
+}
+
+input[type="range"].nb-range {
+  appearance: none;
+  height: 1.4rem;
+  background: transparent;
+  cursor: pointer;
+}
+
+input[type="range"].nb-range::-webkit-slider-runnable-track {
+  height: 0.5rem;
+  background: #fff;
+  border: 3px solid #000;
+}
+
+input[type="range"].nb-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 1.3rem;
+  height: 1.3rem;
+  margin-top: -0.55rem;
+  background: #ffd400;
+  border: 3px solid #000;
+  box-shadow: 2px 2px 0 #000;
+}
+
+/* ---------- Badges & labels ---------- */
+
+.nb-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border: 2px solid #000;
+  font-size: 0.65rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.15rem 0.5rem;
+  background: #fff;
+}
+
+.nb-badge-yellow { background: #ffd400; }
+.nb-badge-pink { background: #ff5d8f; }
+.nb-badge-lime { background: #a6f750; }
+.nb-badge-cyan { background: #54e6e6; }
+.nb-badge-red { background: #ff6b6b; }
+.nb-badge-black { background: #111; color: #fff; border-color: #111; }
+
+.nb-label {
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #111;
+}
+
+.nb-sub {
+  font-size: 0.7rem;
+  color: #555;
+}
+
+/* ---------- Marquee stripe for headers ---------- */
+
+.nb-stripe {
+  background: repeating-linear-gradient(
+    -45deg,
+    #ffd400 0 14px,
+    #111 14px 28px
+  );
+}
+
+/* ---------- Progress ---------- */
+
+.nb-progress-track {
+  border: 3px solid #000;
+  background: #fff;
+  height: 1.25rem;
+  overflow: hidden;
+}
+
+.nb-progress-fill {
+  height: 100%;
+  background: repeating-linear-gradient(
+    -45deg,
+    #a6f750 0 10px,
+    #8ee63a 10px 20px
+  );
+  border-right: 3px solid #000;
+  transition: width 200ms ease;
+}
+
+/* ---------- Scrollbars ---------- */
+
+::-webkit-scrollbar { width: 12px; height: 12px; }
+::-webkit-scrollbar-track { background: #f4efe7; }
+::-webkit-scrollbar-thumb {
+  background: #111;
+  border: 3px solid #f4efe7;
+}
+
+/* ---------- Animations ---------- */
+
+@keyframes nb-pop-in {
+  from { transform: scale(0.96); opacity: 0; }
+  to   { transform: scale(1); opacity: 1; }
+}
+
+.animate-nb-pop {
+  animation: nb-pop-in 120ms ease-out;
+}
+
+@keyframes nb-marquee {
+  from { background-position: 0 0; }
+  to   { background-position: 40px 0; }
+}
+
+.animate-nb-marquee {
+  animation: nb-marquee 1.2s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.animate-spin { animation: spin 0.9s linear infinite; }
