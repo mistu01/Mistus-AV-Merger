@@ -4,6 +4,7 @@ Localhost-only binding with CSRF origin protection and `/api/v1` routes.
 """
 
 import os
+import string
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, HTTPException, Request, Response
@@ -19,7 +20,12 @@ from mistus_av_merger.core.hwdetect import HardwareDetector
 from mistus_av_merger.core.jobs import JobQueueManager, RenderJob
 from mistus_av_merger.core.pairing import AutoPairingEngine
 from mistus_av_merger.core.presets import PresetManager
-from mistus_av_merger.core.scanner import MediaScanner
+from mistus_av_merger.core.scanner import (
+    AUDIO_EXTENSIONS,
+    VIDEO_EXTENSIONS,
+    MediaScanner,
+    natural_sort_key,
+)
 
 app = FastAPI(
     title="Mistus AV Merger API",
@@ -125,6 +131,136 @@ def generate_pairing(req: PairRequest):
         fuzzy_threshold=req.fuzzy_threshold,
     )
     return plan
+
+
+# ---------------- Real Filesystem Browsing ----------------
+
+_FILE_SYSTEM_BLACKLIST = {"System Volume Information", "$RECYCLE.BIN", "$RECYCLER", "Config.Msi"}
+_KINDS = {".mp3": "audio", ".wav": "audio", ".flac": "audio", ".m4a": "audio", ".aac": "audio",
+          ".ogg": "audio", ".opus": "audio", ".wma": "audio", ".mp4": "video", ".mkv": "video",
+          ".mov": "video", ".avi": "video", ".webm": "video", ".m4v": "video", ".ts": "video"}
+
+
+def _list_drives() -> List[Dict[str, str]]:
+    """Enumerated letters exist on Windows only; other platforms return the home mount."""
+    drives: List[Dict[str, str]] = []
+    if os.name == "nt":
+        for letter in string.ascii_uppercase:
+            root = Path(f"{letter}:\\")
+            try:
+                if root.exists():
+                    drives.append({"label": f"{letter}: Drive", "path": str(root)})
+            except (OSError, PermissionError):
+                continue
+    else:
+        drives.append({"label": "Computer", "path": "/"})
+    return drives
+
+
+def _list_shortcuts() -> List[Dict[str, str]]:
+    home = Path.home()
+    shortcuts = [{"label": "Home", "path": str(home), "icon": "home"}]
+    named = [("Desktop", "Desktop"), ("Downloads", "Downloads"), ("Music", "Music"),
+             ("Videos", "Videos"), ("Pictures", "Pictures"), ("Documents", "Documents")]
+    for label, dirname in named:
+        candidate = home / dirname
+        if candidate.is_dir():
+            shortcuts.append({"label": label, "path": str(candidate), "icon": dirname.lower()})
+    return shortcuts
+
+
+@app.get("/api/v1/fs/list")
+def browse_fs(path: Optional[str] = None, show_hidden: bool = False):
+    """Lists drives/shortcuts (root view) or the real content of a directory."""
+    if path:
+        dir_path = Path(path).expanduser()
+        if not dir_path.exists():
+            raise HTTPException(status_code=404, detail="Directory not found")
+        if not dir_path.is_dir():
+            raise HTTPException(status_code=400, detail="Not a directory")
+    else:
+        dir_path = None
+
+    if dir_path is None:
+        return {
+            "path": None,
+            "parent": None,
+            "isRoot": True,
+            "drives": _list_drives(),
+            "shortcuts": _list_shortcuts(),
+            "entries": [],
+        }
+
+    parent = str(dir_path.parent) if dir_path.parent != dir_path else None
+    entries: List[Dict[str, Any]] = []
+    try:
+        with os.scandir(dir_path) as it:
+            for entry in it:
+                try:
+                    name = entry.name
+                    if name in _FILE_SYSTEM_BLACKLIST:
+                        continue
+                    if not show_hidden and name.startswith("."):
+                        continue
+                    is_dir = entry.is_dir(follow_symlinks=False)
+                    if is_dir and os.name == "nt":
+                        try:
+                            if entry.is_junction():
+                                continue  # skip Windows junctions/symlink dirs to avoid loops
+                        except AttributeError:
+                            pass
+                    if is_dir:
+                        entries.append({"name": name, "path": str(entry.path), "isDir": True,
+                                        "kind": "dir", "sizeBytes": None})
+                    else:
+                        ext = os.path.splitext(name)[1].lower()
+                        kind = _KINDS.get(ext)
+                        if kind is None:
+                            continue  # browser only lists media files (plus directories)
+                        entries.append({"name": name, "path": str(entry.path), "isDir": False,
+                                        "kind": kind, "sizeBytes": entry.stat(follow_symlinks=False).st_size})
+                except (OSError, PermissionError):
+                    continue  # unreadable items are simply hidden
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Access denied by the operating system")
+    except OSError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    dirs = [e for e in entries if e["isDir"]]
+    files = [e for e in entries if not e["isDir"]]
+    dirs.sort(key=lambda e: natural_sort_key(e["name"]))
+    files.sort(key=lambda e: natural_sort_key(e["name"]))
+
+    return {
+        "path": str(dir_path),
+        "parent": parent,
+        "isRoot": False,
+        "drives": _list_drives(),
+        "shortcuts": _list_shortcuts(),
+        "entries": dirs + files,
+    }
+
+
+class FsProbeRequest(BaseModel):
+    path: str
+
+
+@app.post("/api/v1/fs/probe")
+def probe_fs_file(req: FsProbeRequest):
+    """Full ffprobe of one media file (duration, codecs, resolution) for the UI."""
+    file_path = Path(req.path).expanduser()
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    ext = os.path.splitext(file_path)[1].lower()
+    kind = _KINDS.get(ext)
+    if kind is None:
+        raise HTTPException(status_code=400, detail="Not a supported media file")
+    result = scanner.probe_file(file_path)
+    if result is None:
+        raise HTTPException(status_code=422, detail="ffprobe could not read this file")
+    data = result.to_dict()
+    data["kind"] = kind
+    return data
 
 
 @app.get("/api/v1/queue")
