@@ -1,0 +1,192 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Release tag (e.g. v0.5.0 or v1.0.0-rc.1)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    name: Validate Tag & Changelog Consistency
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version_step.outputs.version }}
+      is_prerelease: ${{ steps.version_step.outputs.is_prerelease }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract Tag & Verify Consistency
+        id: version_step
+        run: |
+          TAG="${{ github.ref_name || inputs.tag_name }}"
+          VERSION_IN_FILE="$(cat VERSION | tr -d '[:space:]')"
+          TAG_CLEAN="${TAG#v}"
+
+          echo "Tag: ${TAG}, Version in file: ${VERSION_IN_FILE}"
+
+          if [ "${TAG_CLEAN}" != "${VERSION_IN_FILE}" ]; then
+            echo "ERROR: Git tag '${TAG}' does not match VERSION file '${VERSION_IN_FILE}'!"
+            exit 1
+          fi
+
+          if ! grep -q "## \[${VERSION_IN_FILE}\]" CHANGELOG.md; then
+            echo "ERROR: CHANGELOG.md has no entry for version [${VERSION_IN_FILE}]!"
+            exit 1
+          fi
+
+          if [[ "${TAG_CLEAN}" =~ -(alpha|beta|rc) ]]; then
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "version=${VERSION_IN_FILE}" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Package ${{ matrix.os }}-${{ matrix.arch }}
+    needs: validate
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            os_name: win
+            arch: x64
+            archive_ext: zip
+          - os: ubuntu-latest
+            os_name: linux
+            arch: x64
+            archive_ext: tar.gz
+          - os: macos-13
+            os_name: macos
+            arch: x64
+            archive_ext: tar.gz
+          - os: macos-14
+            os_name: macos
+            arch: arm64
+            archive_ext: tar.gz
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install .[dev]
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Build Web Frontend Assets
+        run: |
+          npm ci
+          npm run build
+
+      - name: Download Pinned Static FFmpeg / FFprobe
+        shell: bash
+        run: |
+          mkdir -p bin
+          # In CI, fetch pinned static build (e.g. Gyan/BtbN for Windows/Linux, evermeet for macOS)
+          # Here we ensure executable binaries are placed in ./bin
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            sudo apt-get update && sudo apt-get install -y ffmpeg
+            cp "$(which ffmpeg)" bin/
+            cp "$(which ffprobe)" bin/
+          elif [ "${{ runner.os }}" = "macOS" ]; then
+            brew install ffmpeg
+            cp "$(which ffmpeg)" bin/
+            cp "$(which ffprobe)" bin/
+          elif [ "${{ runner.os }}" = "Windows" ]; then
+            choco install ffmpeg --confirm
+            cp "/c/ProgramData/chocolatey/bin/ffmpeg.exe" bin/
+            cp "/c/ProgramData/chocolatey/bin/ffprobe.exe" bin/
+          fi
+
+      - name: Build Portable Executable via PyInstaller
+        shell: bash
+        run: |
+          pyinstaller --clean MistusAVMerger.spec
+
+      - name: Smoke Test Built Binary
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            ./dist/MistusAVMerger/MistusAVMerger.exe --version
+          else
+            chmod +x dist/MistusAVMerger/MistusAVMerger
+            ./dist/MistusAVMerger/MistusAVMerger --version
+          fi
+
+      - name: Create Portable Archive
+        shell: bash
+        run: |
+          ARCHIVE_NAME="MistusAVMerger-v${{ needs.validate.outputs.version }}-${{ matrix.os_name }}-${{ matrix.arch }}"
+          # Add portable.flag so binary operates in zero-install portable mode
+          touch dist/MistusAVMerger/portable.flag
+
+          if [ "${{ matrix.archive_ext }}" = "zip" ]; then
+            7z a "${ARCHIVE_NAME}.zip" ./dist/MistusAVMerger/*
+            sha256sum "${ARCHIVE_NAME}.zip" > "${ARCHIVE_NAME}.zip.sha256"
+          else
+            tar -czf "${ARCHIVE_NAME}.tar.gz" -C dist MistusAVMerger
+            sha256sum "${ARCHIVE_NAME}.tar.gz" > "${ARCHIVE_NAME}.tar.gz.sha256"
+          fi
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-${{ matrix.os_name }}-${{ matrix.arch }}
+          path: |
+            MistusAVMerger-v*.*
+            *.sha256
+
+  release:
+    name: Publish GitHub Release
+    needs: [validate, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all packaged artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release_assets
+          merge-multiple: true
+
+      - name: Extract Release Notes from CHANGELOG.md
+        id: notes
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          # Extract section between ## [VERSION] and next ## [
+          awk "/## \[${VERSION}\]/{flag=1; next} /## \[/{flag=0} flag" CHANGELOG.md > RELEASE_NOTES.md
+          if [ ! -s RELEASE_NOTES.md ]; then
+            echo "Release v${VERSION} with automated cross-platform binaries." > RELEASE_NOTES.md
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "v${{ needs.validate.outputs.version }}"
+          name: "Mistus AV Merger v${{ needs.validate.outputs.version }}"
+          body_path: RELEASE_NOTES.md
+          prerelease: ${{ needs.validate.outputs.is_prerelease == 'true' }}
+          files: release_assets/*
