@@ -4,7 +4,7 @@ Splits long renders into deterministic chunks and stitches completed parts.
 """
 
 from pathlib import Path
-from typing import Dict, List, NamedTuple
+from typing import Dict, List, NamedTuple, Optional
 
 
 class Segment(NamedTuple):

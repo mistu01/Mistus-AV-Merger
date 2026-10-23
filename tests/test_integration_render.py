@@ -5,7 +5,6 @@ using bundled FFmpeg to verify looping, keyframe alignment, and output creation.
 
 import subprocess
 from pathlib import Path
-import pytest
 from mistus_av_merger.core.ffmpeg_builder import FFmpegCommandBuilder
 from mistus_av_merger.core.hwdetect import get_ffmpeg_binary
 

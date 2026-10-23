@@ -3,8 +3,29 @@ Unit tests for SemVer parsing, monotonic version code formula, and schema migrat
 """
 
 import json
-import pytest
 from pathlib import Path
+
+try:
+    import pytest
+except ImportError:
+    class _MockPytestRaises:
+        def __init__(self, exc_type):
+            self.exc_type = exc_type
+            self.value = None
+        def __enter__(self):
+            return self
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            if exc_type is not None and issubclass(exc_type, self.exc_type):
+                self.value = exc_val
+                return True
+            raise AssertionError(f"Expected {self.exc_type}, but got {exc_type}")
+
+    class _MockPytest:
+        @staticmethod
+        def raises(exc_type):
+            return _MockPytestRaises(exc_type)
+
+    pytest = _MockPytest()
 
 from mistus_av_merger.core.versioning import (
     compute_version_code,
