@@ -68,6 +68,12 @@ def update_changelog(changelog_path: Path, new_version: str) -> None:
     content = changelog_path.read_text(encoding="utf-8")
     today = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
 
+    # If the maintainer already prepared a dated section for new_version,
+    # leave the changelog untouched (their notes are authoritative).
+    if re.search(rf"^##\s*\[{re.escape(new_version)}\]", content, flags=re.MULTILINE):
+        print(f"CHANGELOG already has a [{new_version}] section - leaving as written.")
+        return
+
     pattern = r"(^##\s*\[Unreleased\]\s*\n)(.*?)(?=^---\s*\n\s*\n##\s|\Z)"
     match = re.search(pattern, content, flags=re.DOTALL | re.MULTILINE)
     if not match:
