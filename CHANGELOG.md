@@ -15,6 +15,19 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ---
 
+## [0.6.4] - 2026-10-24
+
+### Added
+- feat(api): **real render worker wired to the queue** — jobs queued in the Web UI now actually render. New `POST /api/v1/queue/add` endpoint, a background worker that executes FFmpeg sequentially, live progress parsing (`out_time` / `fps` / `speed` streamed from ffmpeg into job status), pause/resume of the running process, per-job cancel, reorder, clear-completed and stop-after-current controls.
+- feat(api): stream-copy jobs use the duration-aware finite loop; encode jobs clamp output with an explicit `-t` so FFmpeg 8/9 cannot overshoot the audio length (previously ~2s overhang via `-shortest`).
+- feat(api): output folder is created on demand; queue state persists to `active_session.json` and unfinished jobs are restored at startup.
+
+### Changed
+- feat(ui): the Queue tab live-syncs from the backend every 1.5s and is now the single source of truth — fabricated client-side jobs and simulated statuses removed; Start / Pause / Resume / Stop After Current / Clear all hit real endpoints.
+- fix(ui): session save no longer resurrects completed jobs on restart.
+
+---
+
 ## [0.6.3] - 2026-10-24
 
 ### Fixed
