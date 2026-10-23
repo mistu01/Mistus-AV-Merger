@@ -15,6 +15,24 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ---
 
+## [0.6.7] - 2026-10-24
+
+### Fixed
+- fix(hwdetect): **hardware encoders were never detected** — the encoder probe injected `-hwaccel` after the input, which ffmpeg rejects as an output option, so every GPU (NVENC, AMF, QuickSync, VideoToolbox) probed false and renders silently fell back to software x264. Probes are now plain micro-encodes, which is all hardware *encoding* needs. Verified on a machine whose QuickSync immediately became the recommended encoder.
+- perf(ffmpeg): default x264 preset bumped from `medium` to `veryfast` (near-identical quality at CRF 21, ~3x the encode speed on a 4-core i5); x265 presets `fast`; QSV presets `veryfast`.
+- perf(ffmpeg): render commands run at `-loglevel error` with `-nostdin` — banner/lyrics-tag spam no longer floods the progress pipe and job logs.
+- feat(api): **encode auto-fallback** — if a hardware encoder fails mid-render (odd dimensions, driver quirks), the job retries once with libx264 instead of failing.
+
+### Changed
+- feat(ui): the queue's Encode badge shows the actual encoder used per job (e.g. `Encode · h264_qsv`).
+- ci: added `scripts/bench_encoders.py` (encoder/preset/filter-chain benchmarks against the bundled FFmpeg).
+
+### Measured (i5-4570, 4C/4T, 720p worn-tape chain, 120s render)
+- before: 46.8 fps (1.56x realtime), libx264 medium
+- after: 106.8 fps (3.6x realtime) via detected QuickSync; libx264 veryfast fallback ~1.9x; stream copy ~24x
+
+---
+
 ## [0.6.6] - 2026-10-24
 
 ### Added
