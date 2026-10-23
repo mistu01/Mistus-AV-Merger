@@ -44,9 +44,26 @@ def test_synthetic_render_loop(tmp_path: Path):
         audio_path=audio_path,
         output_path=output_path,
         audio_transcode=False,
+        audio_duration_sec=3.0,
+        video_duration_sec=1.0,
     )
 
     result = subprocess.run(render_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     assert result.returncode == 0
     assert output_path.exists()
     assert output_path.stat().st_size > 1000
+
+    # 4. Output duration must match the 3s audio: one 1s clip looped to 3s.
+    ffprobe_path = str(Path(ffmpeg_bin).with_name(
+        "ffprobe.exe" if ffmpeg_bin.endswith(".exe") else "ffprobe"))
+    probe = subprocess.run(
+        [ffprobe_path, "-v", "quiet", "-print_format", "json",
+         "-show_format", str(output_path)],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
+    assert probe.returncode == 0, probe.stderr
+    import json
+    duration = float(json.loads(probe.stdout)["format"]["duration"])
+    # Stream copy must land on ~3s; keyframe/boundary overshoots of a whole
+    # clip or runaway -shortest buffering would put this far off.
+    assert 2.5 <= duration <= 3.5, f"duration {duration:.2f}s != ~3s"

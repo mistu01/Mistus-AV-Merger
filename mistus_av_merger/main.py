@@ -80,9 +80,14 @@ def run_self_test() -> int:
             print("[SelfTest] FAIL: synthetic media generation failed.", file=sys.stderr)
             return 1
 
-        # Tiny looped render: video loops to fill the 6s audio (stream copy).
+        # Tiny looped render: 2s video looped to fill the 6s audio (stream copy).
+        # Duration-aware mode: finite loop count + -t output clamp, which is the
+        # only reliably-top-bounded variant on FFmpeg 8/9 (see ffmpeg_builder).
         builder = FFmpegCommandBuilder(ffmpeg_bin=ffmpeg)
-        cmd = builder.build_stream_copy_loop(clip, tone, output, audio_transcode=True, threads=1)
+        cmd = builder.build_stream_copy_loop(
+            clip, tone, output, audio_transcode=True, threads=1,
+            audio_duration_sec=6.0, video_duration_sec=2.0,
+        )
         r3 = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         if r3.returncode != 0:
             print(r3.stderr[-2000:] if r3.stderr else "", file=sys.stderr)

@@ -3,6 +3,7 @@ FFmpeg command line argument builder.
 Produces safe, list-based argument arrays without shell injection risks.
 """
 
+from math import ceil
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -20,20 +21,49 @@ class FFmpegCommandBuilder:
         output_path: Path,
         audio_transcode: bool = False,
         threads: Optional[int] = None,
+        audio_duration_sec: Optional[float] = None,
+        video_duration_sec: Optional[float] = None,
     ) -> List[str]:
         """
         Builds lossless stream-copy command looping video to match audio length exactly.
-        Video loops indefinitely (-stream_loop -1) and trims at audio termination (-shortest).
+
+        Duration-aware mode (preferred when the caller knows the media durations,
+        e.g. from ffprobe):
+            - a finite, pre-computed -stream_loop count replaces the infinite loop,
+            - an output -t clamp replaces -shortest (which, with stream copy, can
+              only cut on keyframes and overshoots by whole clips on FFmpeg 8/9).
+        Legacy mode (no durations): keeps the historical infinite-loop + -shortest.
         """
-        cmd = [
-            self.ffmpeg_bin,
-            "-y",
-            "-hide_banner",
-            "-loglevel", "info",
-            "-stream_loop", "-1",
-            "-i", str(video_path),
-            "-i", str(audio_path),
-            "-shortest",
+        duration_aware = (
+            audio_duration_sec is not None
+            and video_duration_sec is not None
+            and video_duration_sec > 0
+        )
+        if duration_aware:
+            loop_count = max(1, ceil(audio_duration_sec / video_duration_sec - 1e-6))
+            cmd = [
+                self.ffmpeg_bin,
+                "-y",
+                "-hide_banner",
+                "-loglevel", "info",
+                "-fflags", "+genpts",
+                "-stream_loop", str(loop_count - 1),
+                "-i", str(video_path),
+                "-i", str(audio_path),
+                "-t", f"{audio_duration_sec:.3f}",
+            ]
+        else:
+            cmd = [
+                self.ffmpeg_bin,
+                "-y",
+                "-hide_banner",
+                "-loglevel", "info",
+                "-stream_loop", "-1",
+                "-i", str(video_path),
+                "-i", str(audio_path),
+                "-shortest",
+            ]
+        cmd += [
             "-map", "0:v:0",
             "-map", "1:a:0",
             "-c:v", "copy",

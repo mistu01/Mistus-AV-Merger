@@ -27,6 +27,64 @@ def test_build_stream_copy_loop():
     assert cmd[idx_ca + 1] == "copy"
 
 
+def test_build_stream_copy_loop_duration_aware():
+    """Duration-aware mode: finite loop count and -t output clamp, no -shortest."""
+    builder = FFmpegCommandBuilder(ffmpeg_bin="ffmpeg")
+    cmd = builder.build_stream_copy_loop(
+        video_path=Path("/media/clip.mp4"),
+        audio_path=Path("/media/song.mp3"),
+        output_path=Path("/renders/output.mp4"),
+        audio_transcode=True,
+        audio_duration_sec=6.0,
+        video_duration_sec=2.0,
+    )
+
+    # 6s audio / 2s clip -> exactly 3 iterations (stream_loop 2)
+    idx_loop = cmd.index("-stream_loop")
+    assert cmd[idx_loop + 1] == "2"
+    # Precise output clamp instead of keyframe-limited -shortest
+    idx_t = cmd.index("-t")
+    assert cmd[idx_t + 1] == "6.000"
+    assert "-shortest" not in cmd
+    # Loop timestamps regenerated so stream copy stays monotonic
+    assert "+genpts" in cmd
+    idx_cv = cmd.index("-c:v")
+    assert cmd[idx_cv + 1] == "copy"
+    idx_ca = cmd.index("-c:a")
+    assert cmd[idx_ca + 1] == "aac"
+
+
+def test_build_stream_copy_loop_partial_loop_rounds_up():
+    """Fractional ratios round up: 5s audio / 2s clip -> 3 loops, clamped at 5s."""
+    builder = FFmpegCommandBuilder(ffmpeg_bin="ffmpeg")
+    cmd = builder.build_stream_copy_loop(
+        video_path=Path("/media/clip.mp4"),
+        audio_path=Path("/media/song.mp3"),
+        output_path=Path("/renders/output.mp4"),
+        audio_duration_sec=5.0,
+        video_duration_sec=2.0,
+    )
+    idx_loop = cmd.index("-stream_loop")
+    assert cmd[idx_loop + 1] == "2"  # ceil(5/2) = 3 -> stream_loop 2
+    idx_t = cmd.index("-t")
+    assert cmd[idx_t + 1] == "5.000"
+
+
+def test_build_stream_copy_loop_single_play_shorter_than_audio():
+    """Audio longer than one full loop always loops at least once more."""
+    builder = FFmpegCommandBuilder(ffmpeg_bin="ffmpeg")
+    cmd = builder.build_stream_copy_loop(
+        video_path=Path("/media/clip.mp4"),
+        audio_path=Path("/media/song.mp3"),
+        output_path=Path("/renders/output.mp4"),
+        audio_duration_sec=7.0,
+        video_duration_sec=3.0,
+    )
+    # ceil(7/3)=3 -> stream_loop 2 (two extra loop iterations beyond the first)
+    idx_loop = cmd.index("-stream_loop")
+    assert cmd[idx_loop + 1] == "2"
+
+
 def test_build_reencode_render_with_filters():
     builder = FFmpegCommandBuilder(ffmpeg_bin="ffmpeg")
     cmd = builder.build_reencode_render(
