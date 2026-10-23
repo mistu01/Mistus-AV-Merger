@@ -98,12 +98,15 @@ class HardwareDetector:
             self.recommended_encoder = "libx264"
             self.gpu_brand = "CPU Software (libx264)"
 
-    def get_summary(self) -> Dict[str, any]:
-        if not self._probed:
+    def get_summary(self, block: bool = True) -> Dict[str, any]:
+        """Returns the detection summary. When block=False, returns whatever
+        is currently known (a background thread populates it at startup)."""
+        if block and not self._probed:
             self.probe_all()
         return {
             "recommended": self.recommended_encoder,
             "gpu_brand": self.gpu_brand,
             "encoders": self.available_encoders,
             "is_hardware_accelerated": self.recommended_encoder != "libx264",
+            "probed": self._probed,
         }

@@ -16,6 +16,8 @@ import {
   PlusCircle,
   AlertCircle,
   Sliders,
+  Image as ImageIcon,
+  X,
 } from 'lucide-react';
 import {
   MediaProbe,
@@ -35,6 +37,7 @@ interface SingleRenderViewProps {
   setRenderOptions: React.Dispatch<React.SetStateAction<RenderOptions>>;
   outputFolder: string;
   onSelectOutputFolderClick: () => void;
+  onSelectOverlayImageClick: () => void;
   onAddToQueue: (job: {
     audio: MediaProbe;
     video: MediaProbe;
@@ -55,9 +58,13 @@ export const SingleRenderView: React.FC<SingleRenderViewProps> = ({
   setRenderOptions,
   outputFolder,
   onSelectOutputFolderClick,
+  onSelectOverlayImageClick,
   onAddToQueue,
   onPreview5s,
 }) => {
+  const overlayName = renderOptions.overlayPath
+    ? renderOptions.overlayPath.split(/[\\/]/).pop()
+    : '';
   const [namingPattern, setNamingPattern] = useState('{audio_name}.{video_ext}');
 
   const formatDuration = (sec?: number) => {
@@ -309,6 +316,73 @@ export const SingleRenderView: React.FC<SingleRenderViewProps> = ({
               </label>
             </div>
           </div>
+        </div>
+
+        {/* Image overlay */}
+        <div className="pt-4 border-t-[3px] border-black/10 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <label className="flex items-center gap-2 cursor-pointer text-xs font-bold">
+              <input
+                type="checkbox"
+                className="nb-check"
+                checked={!!renderOptions.overlayEnabled}
+                onChange={e => setRenderOptions(prev => ({ ...prev, overlayEnabled: e.target.checked }))}
+              />
+              <ImageIcon className="w-4 h-4" />
+              <span className="font-black uppercase">Image Overlay (full screen)</span>
+            </label>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={onSelectOverlayImageClick}
+                disabled={!renderOptions.overlayEnabled}
+                className="nb-btn nb-btn-sm nb-btn-cyan nb-press disabled:opacity-40"
+              >
+                <ImageIcon className="w-3.5 h-3.5" />
+                {renderOptions.overlayPath ? 'Change Image' : 'Pick Image'}
+              </button>
+              {renderOptions.overlayPath && (
+                <button
+                  onClick={() => setRenderOptions(prev => ({ ...prev, overlayPath: undefined }))}
+                  className="nb-btn nb-btn-sm nb-btn-white nb-press"
+                  title="Remove overlay image"
+                >
+                  <X className="w-3.5 h-3.5" /> Remove
+                </button>
+              )}
+            </div>
+          </div>
+
+          {renderOptions.overlayEnabled && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-nb-pop">
+              <div>
+                <span className="nb-label">Overlay Image</span>
+                {overlayName ? (
+                  <div className="nb-inset w-full px-3 py-2 text-[11px] font-mono font-bold truncate" title={renderOptions.overlayPath}>
+                    <ImageIcon className="w-3.5 h-3.5 inline mr-1" /> {overlayName}
+                  </div>
+                ) : (
+                  <div className="border-[3px] border-dashed border-black/40 bg-[#f4efe7] px-3 py-2 text-[11px] font-bold text-black/50">
+                    No image picked yet — click &ldquo;Pick Image&rdquo;
+                  </div>
+                )}
+              </div>
+              <div className="space-y-1">
+                <div className="flex justify-between font-bold">
+                  <span className="nb-label">Overlay Opacity</span>
+                  <span className="font-mono border-2 border-black bg-cyan-300 px-1">
+                    {Math.round((renderOptions.overlayOpacity ?? 0.8) * 100)}%
+                  </span>
+                </div>
+                <input
+                  type="range" min="5" max="100" step="5"
+                  value={Math.round((renderOptions.overlayOpacity ?? 0.8) * 100)}
+                  onChange={e => setRenderOptions(prev => ({ ...prev, overlayOpacity: parseInt(e.target.value, 10) / 100 }))}
+                  className="nb-range w-full"
+                />
+                <p className="nb-sub">Stretched over the whole video frame, blended at this opacity.</p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Output destination */}

@@ -126,6 +126,50 @@ test('computeCopyVsEncode selects Stream Copy for native unaltered streams', () 
   assert.match(vhsResult.reason, /VHS effect preset/);
 });
 
+test('computeCopyVsEncode forces re-encode for image overlays', () => {
+  const clip: MediaProbe = {
+    filename: 'clip.mp4',
+    path: '/path/clip.mp4',
+    duration: 30,
+    format: 'mov,mp4',
+    sizeBytes: 10485760,
+    videoCodec: 'h264',
+  };
+  const audio: MediaProbe = {
+    filename: 'song.mp3',
+    path: '/path/song.mp3',
+    duration: 180,
+    format: 'mp3',
+    sizeBytes: 5242880,
+    audioCodec: 'mp3',
+  };
+
+  // Single mode: one explicit overlay image
+  const single = computeCopyVsEncode(clip, audio, {
+    resolution: 'original',
+    overlayEnabled: true,
+    overlayPath: '/path/stamp.png',
+  });
+  assert.equal(single.mode, 'encode');
+  assert.match(single.reason, /overlay/);
+
+  // Bulk mode: overlay folder (random per-render pick happens backend-side)
+  const bulk = computeCopyVsEncode(clip, audio, {
+    resolution: 'original',
+    overlayEnabled: true,
+    overlayFolder: '/path/overlays',
+  });
+  assert.equal(bulk.mode, 'encode');
+  assert.match(bulk.reason, /random image/);
+
+  // Toggle on but nothing picked / no folder -> copy is still allowed
+  const idleToggle = computeCopyVsEncode(clip, audio, {
+    resolution: 'original',
+    overlayEnabled: true,
+  });
+  assert.equal(idleToggle.mode, 'copy');
+});
+
 // Mock probes helper
 function createProbes(names: string[], duration: number, type: 'audio' | 'video'): MediaProbe[] {
   return names.map(name => ({

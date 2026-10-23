@@ -33,7 +33,15 @@ interface FileBrowserModalProps {
   isOpen: boolean;
   onClose: () => void;
   title: string;
-  targetType: 'single_audio' | 'single_video' | 'folder' | 'output' | 'bulk_audio' | 'bulk_video';
+  targetType:
+    | 'single_audio'
+    | 'single_video'
+    | 'single_image'
+    | 'folder'
+    | 'output'
+    | 'bulk_audio'
+    | 'bulk_video'
+    | 'bulk_images';
   onSelectPath: (path: string, probe?: MediaProbe) => void;
   onSelectMultiple?: (probes: MediaProbe[]) => void;
 }
@@ -42,7 +50,7 @@ interface FsEntry {
   name: string;
   path: string;
   isDir: boolean;
-  kind: 'dir' | 'audio' | 'video' | 'other';
+  kind: 'dir' | 'audio' | 'video' | 'image' | 'other';
   sizeBytes?: number | null;
 }
 
@@ -124,8 +132,10 @@ export const FileBrowserModal: React.FC<FileBrowserModalProps> = ({
   const [listing, setListing] = useState<FsListing | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [filterType, setFilterType] = useState<'all' | 'audio' | 'video'>(
-    targetType === 'single_audio' || targetType === 'bulk_audio' ? 'audio' : 'all'
+  const [filterType, setFilterType] = useState<'all' | 'audio' | 'video' | 'image'>(
+    targetType === 'single_audio' || targetType === 'bulk_audio' ? 'audio'
+    : targetType === 'single_image' ? 'image'
+    : 'all'
   );
   const [searchTerm, setSearchTerm] = useState('');
   const [probingPath, setProbingPath] = useState<string | null>(null);
@@ -156,11 +166,12 @@ export const FileBrowserModal: React.FC<FileBrowserModalProps> = ({
     if (searchTerm && !item.name.toLowerCase().includes(searchTerm.toLowerCase())) return false;
     if (filterType === 'audio' && !item.isDir && item.kind !== 'audio') return false;
     if (filterType === 'video' && !item.isDir && item.kind !== 'video') return false;
+    if (filterType === 'image' && !item.isDir && item.kind !== 'image') return false;
     return true;
   });
 
   const isFolderSelect = targetType === 'folder' || targetType === 'output' ||
-    targetType === 'bulk_audio' || targetType === 'bulk_video';
+    targetType === 'bulk_audio' || targetType === 'bulk_video' || targetType === 'bulk_images';
 
   const handleItemClick = async (item: FsEntry) => {
     if (item.isDir) {
@@ -178,6 +189,10 @@ export const FileBrowserModal: React.FC<FileBrowserModalProps> = ({
       } finally {
         setProbingPath(null);
       }
+    } else if (targetType === 'single_image') {
+      // Images need no media probe — pass the path straight through
+      onSelectPath(item.path);
+      onClose();
     } else if (isFolderSelect) {
       // For folder targets, clicking a folder navigates; files do nothing.
       return;
@@ -233,7 +248,7 @@ export const FileBrowserModal: React.FC<FileBrowserModalProps> = ({
 
           <div className="flex items-center gap-2 shrink-0">
             <div className="flex border-[3px] border-black divide-x-[3px] divide-black">
-              {(['all', 'audio', 'video'] as const).map(f => (
+              {(['all', 'audio', 'video', 'image'] as const).map(f => (
                 <button
                   key={f}
                   onClick={() => setFilterType(f)}
@@ -326,8 +341,12 @@ export const FileBrowserModal: React.FC<FileBrowserModalProps> = ({
                       )
                     ) : item.kind === 'audio' ? (
                       <FileAudio className="w-4 h-4 shrink-0" />
-                    ) : (
+                    ) : item.kind === 'image' ? (
+                      <Image className="w-4 h-4 shrink-0" />
+                    ) : item.kind === 'video' ? (
                       <FileVideo className="w-4 h-4 shrink-0" />
+                    ) : (
+                      <FileText className="w-4 h-4 shrink-0" />
                     )}
                     <span className={`truncate max-w-[380px] text-xs font-bold ${item.isDir ? '' : 'font-mono'}`}>
                       {item.name}

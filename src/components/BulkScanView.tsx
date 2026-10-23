@@ -19,6 +19,7 @@ import {
   Film,
   ChevronDown,
   Loader2,
+  Image as ImageIcon,
 } from 'lucide-react';
 import {
   MediaProbe,
@@ -33,10 +34,12 @@ import {
 interface BulkScanViewProps {
   onQueueBatch: (pairings: PairingResult[]) => void;
   renderOptions: RenderOptions;
-  onOpenFolderBrowser: (target: 'bulk_audio' | 'bulk_video' | 'output') => void;
+  setRenderOptions: React.Dispatch<React.SetStateAction<RenderOptions>>;
+  onOpenFolderBrowser: (target: 'bulk_audio' | 'bulk_video' | 'bulk_images' | 'output') => void;
   audioFolder: string;
   videoFolder: string;
   outputFolder: string;
+  overlayImageFolder: string;
 }
 
 const API = '';
@@ -69,10 +72,12 @@ const MODE_INFO: Partial<Record<PairingMode, string>> = {
 export const BulkScanView: React.FC<BulkScanViewProps> = ({
   onQueueBatch,
   renderOptions,
+  setRenderOptions,
   onOpenFolderBrowser,
   audioFolder,
   videoFolder,
   outputFolder,
+  overlayImageFolder,
 }) => {
   const [sameFolder, setSameFolder] = useState(false);
   const [recursive, setRecursive] = useState(false);
@@ -246,6 +251,64 @@ export const BulkScanView: React.FC<BulkScanViewProps> = ({
               </button>
             </div>
           </div>
+        </div>
+
+        {/* Overlay image folder (optional, random pick per render) */}
+        <div className="border-[3px] border-black p-4 space-y-3 bg-[#f4efe7]">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <label className="flex items-center gap-2 cursor-pointer text-xs font-bold">
+              <input
+                type="checkbox"
+                className="nb-check"
+                checked={!!renderOptions.overlayEnabled}
+                onChange={e => setRenderOptions(prev => ({ ...prev, overlayEnabled: e.target.checked }))}
+              />
+              <ImageIcon className="w-4 h-4" />
+              <span className="font-black uppercase">Image Overlay — Random From Folder</span>
+            </label>
+            <button
+              onClick={() => onOpenFolderBrowser('bulk_images')}
+              disabled={!renderOptions.overlayEnabled}
+              className="nb-btn nb-btn-sm nb-btn-cyan nb-press disabled:opacity-40"
+            >
+              <ImageIcon className="w-3.5 h-3.5" />
+              {overlayImageFolder ? 'Change Folder' : 'Pick Image Folder'}
+            </button>
+          </div>
+          {renderOptions.overlayEnabled && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-nb-pop">
+              <div>
+                <span className="nb-label">Overlay Images Folder</span>
+                {overlayImageFolder ? (
+                  <div className="nb-inset w-full px-3 py-2 text-[11px] font-mono font-bold truncate" title={overlayImageFolder}>
+                    <ImageIcon className="w-3.5 h-3.5 inline mr-1" /> {overlayImageFolder.split(/[\\/]/).pop() || overlayImageFolder}
+                  </div>
+                ) : (
+                  <div className="border-[3px] border-dashed border-black/40 bg-white px-3 py-2 text-[11px] font-bold text-black/50">
+                    No folder picked — one random image from it stamps each render.
+                  </div>
+                )}
+                <p className="text-[10px] font-semibold text-black/50 mt-1">
+                  JPG, PNG, WEBP, BMP, GIF &bull; picked randomly, per render, on the server.
+                </p>
+              </div>
+              <div className="space-y-1">
+                <div className="flex justify-between font-bold">
+                  <span className="nb-label">Overlay Opacity</span>
+                  <span className="font-mono border-2 border-black bg-cyan-300 px-1">
+                    {Math.round((renderOptions.overlayOpacity ?? 0.8) * 100)}%
+                  </span>
+                </div>
+                <input
+                  type="range" min="5" max="100" step="5"
+                  value={Math.round((renderOptions.overlayOpacity ?? 0.8) * 100)}
+                  onChange={e => setRenderOptions(prev => ({ ...prev, overlayOpacity: parseInt(e.target.value, 10) / 100 }))}
+                  className="nb-range w-full"
+                />
+                <p className="nb-sub">Stretched over the whole video frame, blended at this opacity.</p>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 flex-wrap">

@@ -43,6 +43,7 @@ export interface RenderOptions {
   noiseSeed?: number;
   overlayEnabled?: boolean;
   overlayPath?: string;
+  overlayFolder?: string;
   overlayOpacity?: number;
   encoderChoice?: string;
   crf?: number;
@@ -314,10 +315,12 @@ export function computeCopyVsEncode(
     };
   }
 
-  if (options.overlayEnabled && options.overlayPath) {
+  if (options.overlayEnabled && (options.overlayPath || options.overlayFolder)) {
     return {
       mode: 'encode',
-      reason: 'Re-encode required: Graphic overlay composition active.'
+      reason: options.overlayPath
+        ? 'Re-encode required: Graphic overlay composition active.'
+        : 'Re-encode required: Graphic overlay folder active (a random image is stamped per render).'
     };
   }
 

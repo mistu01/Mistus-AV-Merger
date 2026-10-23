@@ -135,3 +135,44 @@ def test_build_reencode_render_with_filters():
     assert "scale=1920:1080" in vf_chain
     assert "curves=all=" in vf_chain
     assert "all_seed=777" in vf_chain
+
+
+def test_build_reencode_render_full_screen_overlay(tmp_path):
+    """Overlay input is scaled to the full frame and composited with opacity."""
+    image = tmp_path / "stamp.png"
+    image.write_bytes(b"\x89PNG\r\n\x1a\nstub")
+    builder = FFmpegCommandBuilder(ffmpeg_bin="ffmpeg")
+    cmd = builder.build_reencode_render(
+        video_path=Path("/media/clip.mp4"),
+        audio_path=Path("/media/song.mp3"),
+        output_path=Path("/renders/output.mp4"),
+        encoder="libx264",
+        overlay_path=image,
+        overlay_opacity=0.65,
+    )
+
+    # The image is a third input, after video and audio
+    idx_img = cmd.index(str(image))
+    assert cmd[idx_img - 1] == "-i"
+    idx_fc = cmd.index("-filter_complex")
+    graph = cmd[idx_fc + 1]
+    # scale2ref stretches the image over the whole base frame; opacity is
+    # applied by scaling the alpha channel (overlay's own 'alpha' opts is a
+    # pixfmt selector, not opacity).
+    assert "[2:v][base]scale2ref=" in graph
+    assert "colorchannelmixer=aa=0.65" in graph
+    assert "[refw][ovrlA]overlay=0:0:format=auto[v_out]" in graph
+    assert "alpha=" not in graph
+
+
+def test_build_reencode_render_missing_overlay_skips_composition(tmp_path):
+    builder = FFmpegCommandBuilder(ffmpeg_bin="ffmpeg")
+    cmd = builder.build_reencode_render(
+        video_path=Path("/media/clip.mp4"),
+        audio_path=Path("/media/song.mp3"),
+        output_path=Path("/renders/output.mp4"),
+        encoder="libx264",
+        overlay_path=tmp_path / "ghost.png",
+    )
+    assert "-filter_complex" not in cmd
+    assert "-vf" in cmd

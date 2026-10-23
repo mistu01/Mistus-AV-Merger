@@ -99,6 +99,27 @@ class JobQueueManager:
             self.jobs[idx], self.jobs[target_idx] = self.jobs[target_idx], self.jobs[idx]
             self.save_session()
 
+    def threads_for_profile(self) -> Optional[int]:
+        """Translates the CPU profile into an ffmpeg -threads value.
+
+        aggressive -> None (all cores), balanced -> cores/2,
+        low -> 2, idle -> 1 (keeps the machine usable).
+        """
+        profile = (self.cpu_profile or "balanced").lower()
+        if profile == "aggressive":
+            return None
+        try:
+            cores = os.cpu_count() or 4
+        except Exception:
+            cores = 4
+        if profile == "balanced":
+            return max(2, cores // 2)
+        if profile == "low":
+            return 2
+        if profile == "idle":
+            return 1
+        return None
+
     def apply_cpu_profile(self, proc: subprocess.Popen):
         """Applies nice / priority class to process using psutil."""
         if not psutil or not proc.pid:
@@ -157,8 +178,13 @@ class JobQueueManager:
         """Persists current queue state to active_session.json."""
         try:
             data = {
-                "schema_version": 1,
-                "jobs": [j.to_dict() for j in self.jobs],
+                "schema_version": 2,
+                "settings": {
+                    "cpu_profile": self.cpu_profile,
+                    "concurrency": self.concurrency,
+                    "is_running": self.is_running,
+                },
+                "jobs": [{**j.to_dict(), "options": j.options} for j in self.jobs],
             }
             with open(self.session_file, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
@@ -172,6 +198,12 @@ class JobQueueManager:
         try:
             with open(self.session_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
+            # Rehydrate queue-level settings (schema 2+)
+            settings = data.get("settings") or {}
+            if isinstance(settings.get("cpu_profile"), str):
+                self.cpu_profile = settings["cpu_profile"]
+            if isinstance(settings.get("concurrency"), int):
+                self.concurrency = max(1, min(4, settings["concurrency"]))
             # Rehydrate unfinished jobs
             for jd in data.get("jobs", []):
                 if jd.get("status") in ("queued", "paused", "failed"):
@@ -183,8 +215,9 @@ class JobQueueManager:
                         mode=jd.get("mode", "copy"),
                         mode_reason=jd.get("modeReason", ""),
                         duration=jd.get("duration", 0),
-                        options={},
+                        options=dict(jd.get("options") or {}),
                     )
+                    job.total_segments = max(1, int(jd.get("totalSegments") or 1))
                     job.status = "queued"
                     self.jobs.append(job)
         except Exception as e:

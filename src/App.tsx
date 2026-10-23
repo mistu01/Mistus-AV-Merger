@@ -28,6 +28,15 @@ async function getJson<T>(url: string): Promise<T | null> {
   }
 }
 
+// Real hardware/encoder detection summary from GET /api/v1/hardware
+export interface HardwareSummary {
+  recommended: string;
+  gpu_brand: string;
+  is_hardware_accelerated: boolean;
+  probed: boolean;
+  probing: boolean;
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<'single' | 'bulk' | 'queue' | 'effects'>('single');
   const [appVersion, setAppVersion] = useState('...');
@@ -66,14 +75,20 @@ export default function App() {
   const [isBrowserOpen, setIsBrowserOpen] = useState(false);
   const [browserTitle, setBrowserTitle] = useState('Select Media File');
   const [browserTarget, setBrowserTarget] = useState<
-    'single_audio' | 'single_video' | 'folder' | 'output' | 'bulk_audio' | 'bulk_video'
+    'single_audio' | 'single_video' | 'single_image' | 'folder' | 'output'
+    | 'bulk_audio' | 'bulk_video' | 'bulk_images'
   >('single_audio');
   const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [previewSampleModal, setPreviewSampleModal] = useState(false);
 
-  // Load real version + home directory defaults from the backend
+  // Hardware summary (real automatic CPU/GPU detection from the backend)
+  const [hwSummary, setHwSummary] = useState<HardwareSummary | null>(null);
+  // Bulk-mode overlay image folder (one random image per render, backend-side)
+  const [overlayImageFolder, setOverlayImageFolder] = useState('');
+
+  // Load real version + home directory defaults + hardware + saved settings
   useEffect(() => {
     (async () => {
       const version = await getJson<{ version: string }>('/api/v1/version');
@@ -87,8 +102,53 @@ export default function App() {
         setOutputFolder(prev => prev || `${home}/MistusRenders`);
         setTempFolder(prev => prev || `${home}/MistusRenders/.tmp`);
       }
+
+      const settings = await getJson<{ cpu_profile: string; concurrency: number }>('/api/v1/queue/settings');
+      if (settings) {
+        const profile = settings.cpu_profile as typeof cpuProfile;
+        if (profile) setCpuProfile(profile);
+        if (settings.concurrency) setConcurrency(settings.concurrency);
+      }
     })();
   }, []);
+
+  // Poll real hardware/encoder detection (startup probe runs in the backend)
+  useEffect(() => {
+    let stopped = false;
+    const tick = async () => {
+      const hw = await getJson<HardwareSummary>('/api/v1/hardware');
+      if (stopped || !hw) return;
+      setHwSummary(prev => (JSON.stringify(prev) === JSON.stringify(hw) ? prev : hw));
+    };
+    tick();
+    const timer = window.setInterval(tick, 3000);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  // Persist render-tuning settings on the backend (used by the render worker)
+  const persistQueueSettings = (profile?: typeof cpuProfile, parallel?: number) => {
+    fetch(`${API}/api/v1/queue/settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...(profile ? { cpu_profile: profile } : {}),
+        ...(parallel ? { concurrency: parallel } : {}),
+      }),
+    }).catch(() => undefined);
+  };
+
+  const handleCpuProfileChange = (profile: typeof cpuProfile) => {
+    setCpuProfile(profile);
+    persistQueueSettings(profile);
+  };
+
+  const handleConcurrencyChange = (value: number) => {
+    setConcurrency(value);
+    persistQueueSettings(undefined, value);
+  };
 
   // Handlers
   const openBrowser = (target: typeof browserTarget, title: string) => {
@@ -104,6 +164,15 @@ export default function App() {
         break;
       case 'single_video':
         if (probe) setSelectedVideo(probe);
+        break;
+      case 'single_image':
+        // Single mode: one picked image, full-screen overlay with opacity
+        setRenderOptions(prev => ({ ...prev, overlayEnabled: true, overlayPath: path, overlayFolder: undefined }));
+        break;
+      case 'bulk_images':
+        // Bulk mode: a folder; the backend stamps a random image per render
+        setOverlayImageFolder(path);
+        setRenderOptions(prev => ({ ...prev, overlayEnabled: true, overlayFolder: path, overlayPath: undefined }));
         break;
       case 'folder':
       case 'output':
@@ -125,6 +194,7 @@ export default function App() {
     outputName: string,
     mode: 'copy' | 'encode',
     modeReason: string,
+    overlayFolder?: string,
   ) => ({
     audio_path: audio.path,
     video_path: video.path,
@@ -132,7 +202,11 @@ export default function App() {
     mode,
     mode_reason: modeReason,
     duration: audio.duration,
-    options: { ...renderOptions },
+    ...(overlayFolder ? { overlay_folder: overlayFolder } : {}),
+    options: {
+      ...renderOptions,
+      ...(overlayFolder ? { overlayFolder, overlayPath: undefined } : {}),
+    },
   });
 
   const postQueueCommand = (path: string, body?: Record<string, unknown>) => {
@@ -163,8 +237,9 @@ export default function App() {
   };
 
   const handleQueueBatch = (pairings: PairingResult[]) => {
+    const folder = renderOptions.overlayEnabled ? overlayImageFolder : '';
     const payload = pairings.map(p =>
-      buildQueuePayload(p.audio, p.video, p.outputName, p.mode, p.modeReason),
+      buildQueuePayload(p.audio, p.video, p.outputName, p.mode, p.modeReason, folder || undefined),
     );
     fetch(`${API}/api/v1/queue/add`, {
       method: 'POST',
@@ -254,7 +329,7 @@ export default function App() {
         setActiveTab={setActiveTab}
         queueCount={jobs.filter(j => j.status === 'queued' || j.status === 'rendering').length}
         activeJobsCount={jobs.filter(j => j.status === 'rendering').length}
-        gpuName="ENCODER: AUTO"
+        gpuName={hwSummary ? `ENCODER: ${hwSummary.recommended}` : 'ENCODER: PROBING...'}
         onOpenDiagnostics={() => setIsDiagnosticsOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenAbout={() => setIsAboutOpen(true)}
@@ -277,6 +352,7 @@ export default function App() {
             setRenderOptions={setRenderOptions}
             outputFolder={outputFolder}
             onSelectOutputFolderClick={() => openBrowser('output', 'Pick Where Renders Go')}
+            onSelectOverlayImageClick={() => openBrowser('single_image', 'Pick An Overlay Image (.jpg, .png, .webp)')}
             onAddToQueue={handleAddSingleToQueue}
             onPreview5s={() => setPreviewSampleModal(true)}
           />
@@ -286,14 +362,17 @@ export default function App() {
           <BulkScanView
             onQueueBatch={handleQueueBatch}
             renderOptions={renderOptions}
+            setRenderOptions={setRenderOptions}
             onOpenFolderBrowser={target => {
               if (target === 'bulk_audio') openBrowser('bulk_audio', 'Pick The Audio Folder');
               else if (target === 'bulk_video') openBrowser('bulk_video', 'Pick The Video Clips Folder');
+              else if (target === 'bulk_images') openBrowser('bulk_images', 'Pick The Overlay Images Folder');
               else openBrowser('output', 'Pick Where Rendered Videos Go');
             }}
             audioFolder={audioFolder}
             videoFolder={videoFolder}
             outputFolder={outputFolder}
+            overlayImageFolder={overlayImageFolder}
           />
         )}
 
@@ -347,22 +426,23 @@ export default function App() {
       <DiagnosticsModal
         isOpen={isDiagnosticsOpen}
         onClose={() => setIsDiagnosticsOpen(false)}
-        gpuName="AUTO"
+        gpuName={hwSummary ? hwSummary.gpu_brand : 'AUTO (probing...)'}
       />
 
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         cpuProfile={cpuProfile}
-        setCpuProfile={setCpuProfile}
+        onCpuProfileChange={handleCpuProfileChange}
         concurrency={concurrency}
-        setConcurrency={setConcurrency}
+        onConcurrencyChange={handleConcurrencyChange}
         outputFolder={outputFolder}
         setOutputFolder={setOutputFolder}
         tempFolder={tempFolder}
         setTempFolder={setTempFolder}
         segmentDuration={segmentDuration}
         setSegmentDuration={setSegmentDuration}
+        hwSummary={hwSummary}
       />
 
       <AboutModal

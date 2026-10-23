@@ -4,6 +4,7 @@ Localhost-only binding with CSRF origin protection and `/api/v1` routes.
 """
 
 import os
+import random
 import string
 import subprocess
 import threading
@@ -69,6 +70,21 @@ _encoder_cache: Optional[str] = None
 _encoder_lock = threading.Lock()
 
 
+def _background_hw_probe():
+    """Probes encoders once at startup so GPU selection is ready before the
+    first render (the micro-encode sweep takes a few seconds)."""
+    try:
+        hw_detector.probe_all()
+        global _encoder_cache
+        with _encoder_lock:
+            _encoder_cache = hw_detector.recommended_encoder
+    except Exception as e:
+        print(f"[Warning] Hardware probe failed: {e}")
+
+
+threading.Thread(target=_background_hw_probe, name="hw-probe", daemon=True).start()
+
+
 # Host header origin validation middleware
 @app.middleware("http")
 async def enforce_localhost_security(request: Request, call_next):
@@ -103,7 +119,10 @@ def get_version_info():
 
 @app.get("/api/v1/hardware")
 def get_hardware_info():
-    return hw_detector.get_summary()
+    """Non-blocking: returns the startup probe result once available."""
+    summary = hw_detector.get_summary(block=False)
+    summary["probing"] = not summary.pop("probed", False)
+    return summary
 
 
 @app.get("/api/v1/presets")
@@ -158,7 +177,10 @@ def generate_pairing(req: PairRequest):
 _FILE_SYSTEM_BLACKLIST = {"System Volume Information", "$RECYCLE.BIN", "$RECYCLER", "Config.Msi"}
 _KINDS = {".mp3": "audio", ".wav": "audio", ".flac": "audio", ".m4a": "audio", ".aac": "audio",
           ".ogg": "audio", ".opus": "audio", ".wma": "audio", ".mp4": "video", ".mkv": "video",
-          ".mov": "video", ".avi": "video", ".webm": "video", ".m4v": "video", ".ts": "video"}
+          ".mov": "video", ".avi": "video", ".webm": "video", ".m4v": "video", ".ts": "video",
+          ".jpg": "image", ".jpeg": "image", ".png": "image", ".webp": "image",
+          ".bmp": "image", ".gif": "image"}
+_IMAGE_EXTS = tuple(ext for ext, kind in _KINDS.items() if kind == "image")
 
 
 def _list_drives() -> List[Dict[str, str]]:
@@ -342,6 +364,35 @@ def list_queue():
     return [j.to_dict() for j in queue_mgr.jobs]
 
 
+class QueueSettingsRequest(BaseModel):
+    cpu_profile: Optional[str] = None
+    concurrency: Optional[int] = None
+
+
+@app.get("/api/v1/queue/settings")
+def get_queue_settings():
+    return {
+        "cpu_profile": queue_mgr.cpu_profile,
+        "concurrency": queue_mgr.concurrency,
+    }
+
+
+@app.post("/api/v1/queue/settings")
+def set_queue_settings(req: QueueSettingsRequest):
+    """Persists render-tuning settings (CPU profile / parallel jobs)."""
+    if req.cpu_profile is not None:
+        if req.cpu_profile not in ("aggressive", "balanced", "low", "idle"):
+            raise HTTPException(status_code=400, detail=f"Unknown CPU profile: {req.cpu_profile}")
+        queue_mgr.cpu_profile = req.cpu_profile
+    if req.concurrency is not None:
+        queue_mgr.concurrency = max(1, min(4, int(req.concurrency)))
+    queue_mgr.save_session()
+    return {
+        "cpu_profile": queue_mgr.cpu_profile,
+        "concurrency": queue_mgr.concurrency,
+    }
+
+
 # ---------------- Real Render Worker ----------------
 
 _MP4_SAFE_AUDIO_EXTS = {".aac", ".mp3", ".m4a", ".ac3"}
@@ -356,14 +407,19 @@ def _needs_audio_transcode(audio_path: Path, output_path: Path) -> bool:
 
 
 def _pick_encoder() -> str:
-    """Resolves the best available (hardware-first)VIDEO encoder once."""
+    """Resolves the best available (hardware-first)VIDEO encoder once.
+
+    Prefers the result of the startup background probe; only falls back to a
+    synchronous probe when that thread has not finished yet."""
     global _encoder_cache
     with _encoder_lock:
         if _encoder_cache is None:
             try:
-                det = HardwareDetector()
-                det.probe_all()
-                _encoder_cache = det.recommended_encoder
+                if hw_detector.available_encoders:
+                    _encoder_cache = hw_detector.recommended_encoder
+                else:
+                    hw_detector.probe_all()
+                    _encoder_cache = hw_detector.recommended_encoder
             except Exception:
                 _encoder_cache = "libx264"
         return _encoder_cache
@@ -379,6 +435,37 @@ def _pick_probe_duration(path: Path) -> Optional[float]:
 
 class QueueAddRequest(BaseModel):
     jobs: List[Dict[str, Any]]
+
+
+def _resolve_job_overlay(raw: Dict[str, Any], options: Dict[str, Any], mode: str) -> tuple[str, str]:
+    """Resolves the concrete overlay image for one job.
+
+    Two sources: an explicit `overlayPath` (single mode pick) or an
+    `overlay_folder` (bulk mode) from which ONE image is drawn at random for
+    this specific job. Returns (resolved_path_or_empty, adjusted_mode).
+    """
+    overlay_path = str(options.get("overlayPath") or "").strip()
+    overlay_folder = str(raw.get("overlay_folder") or "").strip()
+
+    if overlay_folder:
+        folder = Path(overlay_folder)
+        if not folder.is_dir():
+            raise HTTPException(status_code=400, detail=f"Overlay image folder not found: {folder}")
+        images = sorted(
+            p for p in folder.iterdir()
+            if p.suffix.lower() in _IMAGE_EXTS and p.is_file()
+        )
+        if not images:
+            raise HTTPException(status_code=400, detail=f"No overlay images found in: {folder}")
+        overlay_path = str(random.choice(images))
+
+    if overlay_path:
+        if not Path(overlay_path).exists():
+            raise HTTPException(status_code=400, detail=f"Overlay image not found: {overlay_path}")
+        if mode == "copy":
+            # Stream copy cannot burn an overlay; force a re-encode.
+            mode = "encode"
+    return overlay_path, mode
 
 
 @app.post("/api/v1/queue/add")
@@ -399,7 +486,14 @@ def add_jobs(req: QueueAddRequest):
             raise HTTPException(status_code=400, detail=f"Cannot create output folder: {e}")
 
         mode = str(raw.get("mode") or "copy")
+        mode_reason = str(raw.get("mode_reason") or "")
         options = dict(raw.get("options") or {})
+        overlay_path, mode = _resolve_job_overlay(raw, options, mode)
+        if overlay_path:
+            options["overlayPath"] = overlay_path
+        else:
+            options.pop("overlayPath", None)
+
         audio_dur = raw.get("duration")
         if not audio_dur:
             probed = _pick_probe_duration(audio_path)
@@ -412,7 +506,7 @@ def add_jobs(req: QueueAddRequest):
             video_path=str(video_path),
             output_path=str(output_path),
             mode=mode,
-            mode_reason=str(raw.get("mode_reason") or ""),
+            mode_reason=mode_reason,
             duration=float(audio_dur),
             options={**options, "video_duration_sec": video_dur},
         )
@@ -436,6 +530,7 @@ def _execute_job(job: RenderJob):
     command: List[str] = []
 
     try:
+        job_threads = int(opts.get("threads") or 0) or queue_mgr.threads_for_profile()
         if job.mode == "encode":
             preset = preset_mgr.get_preset(str(opts.get("vhsPreset") or "none"))
             filtergraph = preset["filtergraph"] if preset else ""
@@ -454,7 +549,7 @@ def _execute_job(job: RenderJob):
                 overlay_path=Path(str(opts.get("overlayPath"))) if opts.get("overlayPath") else None,
                 overlay_opacity=float(opts.get("overlayOpacity", 0.8)),
                 duration_sec=job.duration or None,
-                threads=int(opts.get("threads") or 0) or None,
+                threads=job_threads,
             )
         else:
             video_dur = float(opts.get("video_duration_sec") or 0.0)
@@ -465,6 +560,7 @@ def _execute_job(job: RenderJob):
                 audio_transcode=_needs_audio_transcode(audio, output),
                 audio_duration_sec=job.duration or None,
                 video_duration_sec=video_dur or None,
+                threads=job_threads,
             )
 
         job.status = "rendering"

@@ -157,9 +157,17 @@ class FFmpegCommandBuilder:
         # Combine video filters
         vf_string = ",".join(vfilters) if vfilters else "null"
 
-        # If overlay exists, chain into overlay filter
+        # If overlay exists, scale it to cover the full frame, then composite
+        # with the requested opacity. NOTE: overlay's 'alpha' option is a pixel
+        # FORMAT selector, not opacity — real blending requires pre-scaled
+        # alpha via colorchannelmixer (scale2ref input order: overlay first).
         if overlay_path and overlay_path.exists():
-            vf_string = f"[0:v]{vf_string}[base];[base][2:v]overlay=0:0:format=auto:alpha={overlay_opacity:.2f}[v_out]"
+            vf_string = (
+                f"[0:v]{vf_string}[base];"
+                f"[2:v][base]scale2ref=w=main_w:h=main_h[ovrl][refw];"
+                f"[ovrl]format=rgba,colorchannelmixer=aa={overlay_opacity:.2f}[ovrlA];"
+                f"[refw][ovrlA]overlay=0:0:format=auto[v_out]"
+            )
             cmd.extend(["-filter_complex", vf_string, "-map", "[v_out]"])
         else:
             cmd.extend(["-vf", vf_string, "-map", "0:v:0"])
