@@ -15,6 +15,14 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ---
 
+## [0.6.1] - 2026-10-24
+
+### Fixed
+- fix(ui): bundled web frontend now resolves correctly in frozen (PyInstaller onedir) builds — `_internal/dist` was missed by one path level, so Windows/Linux/macOS bundles launched to `{"detail":"Not Found"}` instead of the UI.
+- chore(repo): stop tracking `__pycache__` bytecode files; ignore them in `.gitignore`.
+
+---
+
 ## [0.6.0] - 2026-10-23
 
 ### Added

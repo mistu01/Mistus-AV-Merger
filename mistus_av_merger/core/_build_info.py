@@ -1,15 +1,17 @@
 """
-Build metadata populated at packaging/CI time with fallbacks for development.
+Build metadata POPULATED AT PACKAGING/CI TIME -- do not edit by hand.
+Regenerate with: python scripts/gen_build_info.py --help
 """
 
 BUILD_INFO = {
-    "version": "0.5.0",
-    "version_code": 500,
-    "git_commit": "a7f93c2",
-    "git_branch": "release/v0.5.0",
-    "build_date_utc": "2026-10-23T08:50:00Z",
-    "target_os": "linux",
-    "target_arch": "x86_64",
-    "ffmpeg_version": "4.4.2-0ubuntu0.22.04.1",
+    "version": "0.6.1",
+    "version_code": 601,
+    "prerelease": None,
+    "git_commit": "dev",
+    "git_ref": "main",
+    "build_date_utc": "2026-10-23T19:03:31Z",
+    "target_os": "dev",
+    "target_arch": "dev",
+    "ffmpeg_version": "bundled",
     "ffmpeg_license": "GPLv3",
 }
