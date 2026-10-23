@@ -15,6 +15,13 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ---
 
+## [0.6.3] - 2026-10-24
+
+### Fixed
+- fix(api): "Places" shortcuts now resolve real Windows known folders via `SHGetKnownFolderPath`, following OneDrive folder-backup redirection — previously Desktop / Documents etc. pointed at the bare profile folder, which is empty when OneDrive backup redirects them, so the file browser showed "No matching media files or folders here".
+
+---
+
 ## [0.6.2] - 2026-10-24
 
 ### Added
