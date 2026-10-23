@@ -15,6 +15,20 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ---
 
+## [0.6.6] - 2026-10-24
+
+### Added
+- feat(ui)+feat(api): **image overlay** — single mode stamps one picked image over the whole video frame with an adjustable opacity slider; bulk mode takes an overlay image *folder* and the backend randomly picks one image per render job (stamped into the job's options so it survives restarts). The file browser gained image targets (JPG/PNG/WEBP/BMP/GIF) and an image filter.
+- fix(ffmpeg): overlay opacity actually blends now — the overlay filter's `alpha` option is a pixel-format selector, not opacity; opacity is applied via `colorchannelmixer=aa` and the image is stretched full-screen with `scale2ref` (verified numerically: 35% red over testsrc → exact expected blend).
+- feat(api): **real CPU profile wiring** — aggressive (all cores), balanced (half the cores), low (2 threads), idle (1 thread) now set both ffmpeg `-threads` and OS process priority; new `GET/POST /api/v1/queue/settings` persists the profile and parallel-renders setting across restarts.
+- feat(api): **automatic CPU/GPU detection without blocking** — the encoder micro-encode probe runs on a background thread at startup; `GET /api/v1/hardware` returns immediately while probing, and renders use the best detected GPU encoder (NVENC / AMF / QuickSync) as soon as the probe lands.
+
+### Changed
+- feat(ui): header shows the real detected encoder instead of a fake "AUTO"; Settings shows the GPU/CPU detection summary and applies CPU-profile changes to the backend instantly.
+- fix(api): queue/add force-bumps copy→encode when an overlay is present (stream copy cannot compose) and validates overlay paths/folders.
+
+---
+
 ## [0.6.5] - 2026-10-24
 
 ### Fixed
