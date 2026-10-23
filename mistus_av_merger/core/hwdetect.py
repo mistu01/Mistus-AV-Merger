@@ -9,10 +9,9 @@ from typing import Dict, List, Optional, Tuple
 
 
 def get_ffmpeg_binary() -> str:
-    """Finds bundled or system FFmpeg binary."""
-    # Check bundled path
-    bundled = shutil.which("ffmpeg")
-    return bundled or "ffmpeg"
+    """Finds bundled or system FFmpeg binary (bundled ./bin wins over PATH)."""
+    from mistus_av_merger.core.binaries import get_ffmpeg_path
+    return str(get_ffmpeg_path())
 
 
 def probe_encoder_actual(encoder_name: str, extra_args: Optional[List[str]] = None) -> bool:

@@ -1,55 +1,57 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-PyInstaller specification file for Mistus AV Merger.
-Bundles static FFmpeg binaries, web frontend assets, and presets into a portable standalone executable.
+PyInstaller specification for Mistus AV Merger (onedir, portable).
+
+Bundles into a portable single-directory distribution:
+  - the web frontend (npm build output, repo ./dist)  -> ./dist
+  - the presets catalog                               -> ./mistus_av_merger/presets
+  - the VERSION file                                  -> ./
+  - pinned static FFmpeg/FFprobe                      -> ./bin
+
+Build prerequisites:
+  1. npm ci && npm run build          (produces ./dist with index.html)
+  2. python scripts/fetch_ffmpeg.py   (populates ./bin with verified binaries)
+  3. python scripts/gen_build_info.py (refreshes mistus_av_merger/core/_build_info.py)
+  4. pyinstaller --clean MistusAVMerger.spec
 """
 
-import sys
 from pathlib import Path
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_submodules
 
-block_cipher = None
+root = Path(SPECPATH).resolve()
 
-root_dir = Path(__file__).resolve().parent
-
-# Collect data files
+# ---------------- Data files ----------------
 datas = [
-    (str(root_dir / "VERSION"), "."),
-    (str(root_dir / "mistus_av_merger" / "presets" / "presets_v1.json"), "mistus_av_merger/presets"),
+    (str(root / "VERSION"), "."),
+    (str(root / "mistus_av_merger" / "presets" / "presets_v1.json"), "mistus_av_merger/presets"),
 ]
 
-# Include built web assets if available
-dist_dir = root_dir / "dist"
-if dist_dir.exists():
+# Include built web assets when they exist (CI builds them just before packaging).
+dist_dir = root / "dist"
+if (dist_dir / "index.html").exists():
     datas.append((str(dist_dir), "dist"))
 
-# Include bundled FFmpeg and FFprobe binaries
+# ---------------- Bundled FFmpeg / FFprobe (checksum-verified in CI) ----------------
 binaries = []
-bin_dir = root_dir / "bin"
-if bin_dir.exists():
-    for f in bin_dir.iterdir():
+bin_dir = root / "bin"
+if bin_dir.is_dir():
+    for f in sorted(bin_dir.iterdir()):
         if f.is_file():
-            binaries.append((str(f), "."))
+            binaries.append((str(f), "bin"))
 
-hiddenimports = [
-    "uvicorn.logging",
-    "uvicorn.loops",
-    "uvicorn.loops.auto",
-    "uvicorn.protocols",
-    "uvicorn.protocols.http",
-    "uvicorn.protocols.http.auto",
-    "uvicorn.protocols.websockets",
-    "uvicorn.protocols.websockets.auto",
-    "uvicorn.lifespan",
-    "uvicorn.lifespan.on",
+# ---------------- Hidden imports ----------------
+# Uvicorn resolves protocol/loop/lifespan implementations dynamically at runtime,
+# so every submodule that is actually installed must be collected explicitly.
+hiddenimports = collect_submodules("uvicorn") + [
     "fastapi",
     "pydantic",
     "psutil",
+    "mistus_av_merger.core.binaries",
 ]
 
 a = Analysis(
     ["mistus_av_merger/main.py"],
-    pathex=[str(root_dir)],
+    pathex=[str(root)],
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
@@ -57,33 +59,37 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
-    cipher=block_cipher,
     noarchive=False,
 )
 
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+pyz = PYZ(a.pure)
 
+# onedir build: EXE must exclude binaries; COLLECT places everything in dist/MistusAVMerger
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
     [],
+    exclude_binaries=True,
     name="MistusAVMerger",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
-    upx_exclude=[],
-    runtime_tmpdir=None,
+    upx=False,  # UPX corrupts/invalidates signed AV binaries and macOS codesign
     console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,
-    target_arch=None,
+    target_arch=None,  # never universal2: separate arm64 and x64 builds
     codesign_identity=None,
     entitlements_file=None,
-    icon=str(root_dir / "assets" / "icon.ico") if (root_dir / "assets" / "icon.ico").exists() else None,
+    icon=str(root / "assets" / "icon.ico") if (root / "assets" / "icon.ico").exists() else None,
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.datas,
+    strip=False,
+    upx=False,
+    upx_exclude=[],
+    name="MistusAVMerger",
 )

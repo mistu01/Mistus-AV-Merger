@@ -1,6 +1,8 @@
 node_modules/
 build/
 dist/
+bin/
+.ffmpeg-cache/
 coverage/
 .DS_Store
 *.log

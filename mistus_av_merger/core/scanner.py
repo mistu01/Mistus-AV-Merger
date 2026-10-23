@@ -64,7 +64,12 @@ class MediaScanner:
     """Scans directories, probes media with ffprobe, and caches probe entries."""
 
     def __init__(self, ffprobe_bin: str = "ffprobe"):
-        self.ffprobe_bin = shutil.which(ffprobe_bin) or ffprobe_bin
+        if ffprobe_bin == "ffprobe":
+            # Default: resolve the bundled ffprobe (bundled ./bin wins over PATH).
+            from mistus_av_merger.core.binaries import get_ffprobe_path
+            self.ffprobe_bin = str(get_ffprobe_path())
+        else:
+            self.ffprobe_bin = shutil.which(ffprobe_bin) or ffprobe_bin
         self._cache: Dict[Tuple[str, float, int], MediaProbeResult] = {}
 
     def probe_file(self, file_path: Path) -> Optional[MediaProbeResult]:

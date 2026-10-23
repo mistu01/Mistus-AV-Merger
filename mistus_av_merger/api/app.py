@@ -157,7 +157,18 @@ def shutdown_server():
     return {"status": "shutting_down"}
 
 
-# Mount static web frontend if built
-dist_dir = get_app_root() / "dist"
-if dist_dir.exists():
+# Mount static web frontend if built. In frozen (PyInstaller onedir) builds the
+# frontend is bundled into the _internal directory next to the Python modules,
+# so resolve from both the app root (dev/portable) and the package root (frozen).
+def _find_frontend_dist():
+    candidates = [get_app_root() / "dist"]
+    candidates.append(Path(__file__).resolve().parent.parent / "dist")
+    for candidate in candidates:
+        if candidate.is_dir():
+            return candidate
+    return None
+
+
+dist_dir = _find_frontend_dist()
+if dist_dir and (dist_dir / "index.html").exists():
     app.mount("/", StaticFiles(directory=str(dist_dir), html=True), name="static")

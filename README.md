@@ -171,14 +171,14 @@ Given:
 ## Building from Source
 
 ### Prerequisites
-- Python 3.10+
-- Node.js 18+ and npm
-- FFmpeg 4.4+ (or bundled static binary)
+- Python 3.11+
+- Node.js 20+ and npm
+- FFmpeg 4.4+ (a checksum-verified static build can be fetched automatically, see below)
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/mistus/mistus-av-merger.git
-cd mistus-av-merger
+git clone https://github.com/mistu01/Mistus-AV-Merger.git
+cd Mistus-AV-Merger
 
 # 2. Install Python dependencies
 python -m pip install -e ".[dev]"
@@ -187,22 +187,32 @@ python -m pip install -e ".[dev]"
 npm ci
 npm run build
 
-# 4. Run tests
+# 4. Fetch pinned, SHA256-verified static FFmpeg/FFprobe into ./bin
+python scripts/fetch_ffmpeg.py
+
+# 5. Run tests
 pytest -v tests/
 npx tsx --test src/utils/engine.test.ts
 
-# 5. Launch local application
+# 6. Launch local application
 python -m mistus_av_merger
 ```
+
+Handy CLI flags: `--version`, `--port 8080`, `--no-browser`, and
+`--self-test` (offline smoke test rendering a 2s clip + 6s tone through the
+bundled FFmpeg and verifying the ~6s result with the bundled ffprobe).
 
 ### Packaging Portable Standalone Executable
 
 ```bash
-# Build standalone bundle using PyInstaller spec
+python scripts/fetch_ffmpeg.py              # ./bin gets verified ffmpeg/ffprobe
+python scripts/gen_build_info.py            # refresh build metadata
 pyinstaller --clean MistusAVMerger.spec
 ```
 
-The resulting portable distribution will be created in `dist/MistusAVMerger/`.
+The resulting portable distribution is created in `dist/MistusAVMerger/`.
+Continuous builds do exactly this plus a full smoke test; see
+`.github/workflows/build-release.yml` and "Releases" below.
 
 ---
 
@@ -212,22 +222,76 @@ The resulting portable distribution will be created in `dist/MistusAVMerger/`.
 - Single source of truth is the root `VERSION` file.
 - Monotonic Android-style integer version code:
   $$\text{versionCode} = \text{MAJOR} \times 10000 + \text{MINOR} \times 100 + \text{PATCH}$$
-  *(e.g., `0.5.0` &rarr; `500`, `1.2.3` &rarr; `10203`)*.
-- To release a new version:
+  *(e.g., `0.6.0` &rarr; `600`, `1.2.3` &rarr; `10203`)*.
+- To release a new version (Path A — no manual tagging needed):
   ```bash
-  python scripts/bump_version.py minor
-  git push origin main --tags
+  python scripts/bump_version.py minor --push
   ```
-- GitHub Actions automatically runs PR verification, validates tags against `VERSION` and `CHANGELOG.md`, runs the multi-OS build matrix, and publishes the release assets with SHA256 sums.
+  This bumps `VERSION`, rolls `[Unreleased]` into a dated `CHANGELOG.md` section,
+  commits, tags, and pushes. The `Build and Release` workflow then publishes the
+  bundles automatically.
+- Path B — push a tag (`v*.*.*`, must match `VERSION`) instead; the same workflow
+  runs on tag pushes.
+- GitHub Actions automatically runs CI on pushes/PRs, validates tags against
+  `VERSION` and `CHANGELOG.md`, runs the multi-OS build matrix, smoke tests the
+  binaries, and publishes the release assets with SHA256 sums.
+
+---
+
+## Releases & Downloads
+
+Every release ships four portable bundles with a `SHA256SUMS.txt` manifest:
+
+| Platform | Bundle | CLI executable | Notes |
+| :--- | :--- | :--- | :--- |
+| Windows 10+ (x64) | `MistusAVMerger-v*-win-x64.zip` | `MistusAVMerger.exe` | SmartScreen prompt on first run is expected |
+| Linux x86_64 | `MistusAVMerger-v*-linux-x64.tar.gz` | `MistusAVMerger` | glibc baseline: built on Ubuntu 22.04+ |
+| macOS Intel (x64) | `MistusAVMerger-v*-macos-x64.tar.gz` | `MistusAVMerger` | macOS 10.15+ |
+| macOS Apple Silicon (arm64) | `MistusAVMerger-v*-macos-arm64.tar.gz` | `MistusAVMerger` | macOS 11+, ad-hoc signed |
+
+Run it:
+
+```bash
+unzip MistusAVMerger-v0.6.0-win-x64.zip -d MistusAVMerger   # Windows
+./MistusAVMerger/MistusAVMerger.exe
+
+tar xzf MistusAVMerger-v0.6.0-linux-x64.tar.gz               # Linux / macOS
+./MistusAVMerger/MistusAVMerger --port 8080                  # optional fixed port
+```
+
+### How releases happen automatically
+
+1. A matching **dated section must exist in `CHANGELOG.md`** (see Releasing in CONTRIBUTING.md).
+2. Either:
+   - **Path A (no manual tagging):** a push to `main` that changes the `VERSION` file
+     (e.g. via `python scripts/bump_version.py minor --push`) makes
+     `.github/workflows/build-release.yml` test, build all four bundles, smoke test
+     each binary, and create both the tag and the GitHub Release; or
+   - **Path B:** push a `v*.*.*` tag (the tag must exactly match `VERSION`).
+3. Bundled FFmpeg/FFprobe are pinned, SHA256-verified static builds
+   (`scripts/ffmpeg_manifest.json`); the release notes list each bundle's FFmpeg
+   version and license flavor.
+
+### macOS Gatekeeper / SmartScreen
+
+macOS binaries are **ad-hoc signed** (no paid Developer ID certificate), so
+Gatekeeper quarantines them on first launch. Unblock the whole bundle:
+
+```bash
+xattr -cr /path/to/MistusAVMerger
+./MistusAVMerger/MistusAVMerger
+```
+
+On Windows, click **"More info" → "Run anyway"** at the SmartScreen prompt.
 
 ---
 
 ## Troubleshooting
 
 - **macOS Gatekeeper / Quarantine**:
-  If macOS displays a warning about an unverified developer:
   ```bash
-  xattr -d com.apple.quarantine MistusAVMerger
+  xattr -cr /path/to/MistusAVMerger        # clear quarantine for the whole bundle
+  codesign -v -v MistusAVMerger            # ad-hoc signature self-check
   ```
 - **Windows SmartScreen**:
   Click "More Info" &rarr; "Run Anyway". Portable executables built without expensive commercial code-signing certificates will trigger standard SmartScreen prompts on first launch.

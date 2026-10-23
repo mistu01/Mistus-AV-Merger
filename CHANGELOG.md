@@ -15,6 +15,23 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ---
 
+## [0.6.0] - 2026-10-23
+
+### Added
+- feat(build): full multi-platform release automation — `build-release.yml` builds signed, checksum-verified portable bundles for `win-x64`, `linux-x64`, `macos-x64` and `macos-arm64` on every `v*.*.*` tag, every `main` push that bumps `VERSION`, and on manual dispatch (`publish=false` for artifact-only dry runs).
+- build(scripts): `scripts/fetch_ffmpeg.py` + pinned `scripts/ffmpeg_manifest.json` download static FFmpeg/FFprobe builds and hard-fail on SHA256 mismatch (cached via `actions/cache`).
+- build(scripts): `scripts/gen_build_info.py` stamps version, version code, commit, ref, build date, OS/arch and FFmpeg flavor into `mistus_av_merger/core/_build_info.py` at packaging time.
+- ci(build): binary smoke tests on every platform — `--version` output, server `/api/v1/health` version check with `--no-browser`, and a looped render self-test (`--self-test`: 2s synthetic clip + 6s tone → ~6s output verified with the bundled ffprobe).
+- feat(cli): `--self-test` offline render smoke test flag; bundled FFmpeg/FFprobe are now resolved from the application directory first (`core/binaries.py`) instead of `PATH`.
+- build(spec): PyInstaller spec rewritten as a proper onedir `COLLECT` bundle; frontend assets, presets, and `VERSION` are bundled as data files; UPX disabled so macOS codesign stays valid.
+- fix(portable): static web frontend is now mounted correctly in frozen (onedir) builds, in addition to dev/portable layouts.
+
+### Changed
+- ci(CI): dropped Python 3.10 (project requires 3.11+); matrix is now 3.11/3.12/3.13; all actions bumped to Node.js 24 majors (`checkout@v7`, `setup-python@v6`, `setup-node@v6`, `upload-artifact@v7`, `download-artifact@v8`, `cache@v5`); pip/npm caching via `cache: pip|npm`; concurrency groups cancel superseded runs.
+- build(scripts): `scripts/bump_version.py` gained `--push` and `--no-tag` and performs commit/tag wiring itself; documents release path A (VERSION push) and B (tag push).
+
+---
+
 ## [0.5.0] - 2026-10-23
 
 ### Added

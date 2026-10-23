@@ -7,16 +7,16 @@ name = "mistus-av-merger"
 dynamic = ["version"]
 description = "Portable cross-platform audio-video looping merger with bulk auto-pairing, hardware acceleration, and crash-safe segment resume."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
 authors = [
     { name = "Mistus Audio-Visual Systems", email = "contact@mistus.dev" }
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Operating System :: OS Independent",
     "Topic :: Multimedia :: Video",
     "Topic :: Multimedia :: Sound/Audio",

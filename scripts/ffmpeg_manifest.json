@@ -1,0 +1,60 @@
+{
+  "_comment": [
+    "Pinned static FFmpeg/FFprobe builds used by scripts/fetch_ffmpeg.py and CI.",
+    "Pinning rule: every download URL is an exact, immutable release build.",
+    "  - win/linux: one archive per platform (BtbN); 'sha256' covers the archive.",
+    "  - macos: osxexperts ships ffmpeg and ffprobe in SEPARATE zips; each file",
+    "    entry carries its own 'url' and the SHA256 of the extracted binary",
+    "    (as published on osxexperts.net).",
+    "Any checksum mismatch aborts hard: unverified binaries are never used.",
+    "Pinned 2026-10-22 (BtbN autobuild-2026-10-22-13-06; osxexperts 8.0 Intel / 9.0 Apple Silicon).",
+    "To upgrade: update url(s) + sha256(s) + 'ffmpeg_version'; the CI cache key is",
+    "derived from this file, so edits invalidate the download cache automatically."
+  ],
+  "ffmpeg_license": "GPLv3",
+  "dest_binaries": ["ffmpeg", "ffprobe"],
+  "platforms": {
+    "win-x64": {
+      "format": "zip",
+      "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-22-13-06/ffmpeg-n9.0.2-33-g4cf298e66a-win64-gpl-9.0.zip",
+      "sha256": "5a8898e31f2c452062d1f1be475befd8ffba04db11e9f8251da3d10d9a1ae2e5",
+      "files": [
+        {"member": "ffmpeg", "out": "ffmpeg.exe"},
+        {"member": "ffprobe", "out": "ffprobe.exe"}
+      ],
+      "ffmpeg_version": "n9.0.2-33-g4cf298e66a (BtbN win64-gpl static, GPLv3)"
+    },
+    "linux-x64": {
+      "format": "tar.xz",
+      "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-22-13-06/ffmpeg-n9.0.2-33-g4cf298e66a-linux64-gpl-9.0.tar.xz",
+      "sha256": "1cb0a72cf393a1fdb661cbbbd0cfe89dc8b197bb21e21473bbde505bb4f2a2a7",
+      "files": [
+        {"member": "ffmpeg", "out": "ffmpeg"},
+        {"member": "ffprobe", "out": "ffprobe"}
+      ],
+      "ffmpeg_version": "n9.0.2-33-g4cf298e66a (BtbN linux64-gpl static, GPLv3)"
+    },
+    "macos-x64": {
+      "format": "zip",
+      "url": "https://www.osxexperts.net/ffmpeg80intel.zip",
+      "files": [
+        {"member": "ffmpeg", "out": "ffmpeg", "sha256": "df3f1e3facdc1ae0ad0bd898cdfb072fbc9641bf47b11f172844525a05db8d11"},
+        {"member": "ffprobe", "out": "ffprobe",
+         "url": "https://www.osxexperts.net/ffprobe80intel.zip",
+         "sha256": "5228e651e2bd67bb55819b27f6138351587b16d2b87446007bf35b7cf930d891"}
+      ],
+      "ffmpeg_version": "8.0 (osxexperts macOS Intel static, GPLv3)"
+    },
+    "macos-arm64": {
+      "format": "zip",
+      "url": "https://www.osxexperts.net/ffmpeg9arm.zip",
+      "files": [
+        {"member": "ffmpeg", "out": "ffmpeg", "sha256": "591260c945d0eef150e3bf82b0ef988bd36a9cecc18ff05d6679617159f0a95e"},
+        {"member": "ffprobe", "out": "ffprobe",
+         "url": "https://www.osxexperts.net/ffprobe9arm.zip",
+         "sha256": "e11c17e8200b3ee4c4c186d245e2b4053f01d56957336c1817fca0b997469106"}
+      ],
+      "ffmpeg_version": "9.0 (osxexperts macOS Apple Silicon static, GPLv3)"
+    }
+  }
+}
