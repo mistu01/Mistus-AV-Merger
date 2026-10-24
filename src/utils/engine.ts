@@ -61,6 +61,7 @@ export interface PairingResult {
   loopCount: number;
   confidence?: number; // 0..1 for fuzzy matches
   excluded: boolean;
+  alreadyDone?: boolean;
 }
 
 export interface AutoPairPlan {

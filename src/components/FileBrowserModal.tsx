@@ -33,6 +33,7 @@ interface FileBrowserModalProps {
   isOpen: boolean;
   onClose: () => void;
   title: string;
+  initialPath?: string;
   targetType:
     | 'single_audio'
     | 'single_video'
@@ -126,6 +127,7 @@ export const FileBrowserModal: React.FC<FileBrowserModalProps> = ({
   isOpen,
   onClose,
   title,
+  initialPath,
   targetType,
   onSelectPath,
 }) => {
@@ -156,9 +158,9 @@ export const FileBrowserModal: React.FC<FileBrowserModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setSearchTerm('');
-      load(undefined);
+      load(initialPath || undefined);
     }
-  }, [isOpen, load]);
+  }, [isOpen, initialPath, load]);
 
   if (!isOpen) return null;
 

@@ -87,6 +87,8 @@ export const BulkScanView: React.FC<BulkScanViewProps> = ({
   const [fuzzyConfidenceThreshold, setFuzzyConfidenceThreshold] = useState(0.65);
   const [randomSeed, setRandomSeed] = useState(42);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [skipAlreadyDone, setSkipAlreadyDone] = useState(true);
+  const [existingOutputNames, setExistingOutputNames] = useState<Set<string>>(new Set());
 
   const [scannedAudio, setScannedAudio] = useState<MediaProbe[]>([]);
   const [scannedVideo, setScannedVideo] = useState<MediaProbe[]>([]);
@@ -97,12 +99,40 @@ export const BulkScanView: React.FC<BulkScanViewProps> = ({
   const [manualExclusions, setManualExclusions] = useState<Record<string, boolean>>({});
   const [manualVideoOverrides, setManualVideoOverrides] = useState<Record<string, string>>({});
 
+  // Query existing files in the output directory so interrupted renders can be resumed
+  const refreshExistingOutputs = async (folder: string) => {
+    if (!folder) {
+      setExistingOutputNames(new Set());
+      return;
+    }
+    try {
+      const res = await fetch(`${API}/api/v1/fs/list?path=${encodeURIComponent(folder)}`);
+      if (res.ok) {
+        const data = await res.json();
+        const set = new Set<string>();
+        (data.entries || []).forEach((e: any) => {
+          if (!e.isDir && (e.sizeBytes === undefined || e.sizeBytes === null || e.sizeBytes > 0)) {
+            set.add(String(e.name || '').toLowerCase());
+          }
+        });
+        setExistingOutputNames(set);
+      }
+    } catch {
+      setExistingOutputNames(new Set());
+    }
+  };
+
+  React.useEffect(() => {
+    refreshExistingOutputs(outputFolder);
+  }, [outputFolder]);
+
   const handleScan = async () => {
     setIsScanning(true);
     setScanError(null);
     setManualExclusions({});
     setManualVideoOverrides({});
     try {
+      await refreshExistingOutputs(outputFolder);
       if (sameFolder && audioFolder) {
         const result = await scanFolder(audioFolder, recursive);
         setScannedAudio(result.audio);
@@ -146,14 +176,16 @@ export const BulkScanView: React.FC<BulkScanViewProps> = ({
     });
 
     const modifiedPairings = rawPlan.pairings.map(p => {
-      const isExcluded = manualExclusions[p.id] ?? p.excluded;
+      const isAlreadyDone = existingOutputNames.has(p.outputName.toLowerCase());
+      const defaultExcluded = (skipAlreadyDone && isAlreadyDone) ? true : p.excluded;
+      const isExcluded = manualExclusions[p.id] ?? defaultExcluded;
       const overrideVideoPath = manualVideoOverrides[p.id];
       let currentVideo = p.video;
       if (overrideVideoPath) {
         const found = scannedVideo.find(v => v.path === overrideVideoPath);
         if (found) currentVideo = found;
       }
-      return { ...p, video: currentVideo, excluded: isExcluded };
+      return { ...p, video: currentVideo, excluded: isExcluded, alreadyDone: isAlreadyDone };
     });
 
     const resolved = resolveCollisions(modifiedPairings, collisionPolicy);
@@ -170,9 +202,14 @@ export const BulkScanView: React.FC<BulkScanViewProps> = ({
     manualExclusions,
     manualVideoOverrides,
     collisionPolicy,
+    skipAlreadyDone,
+    existingOutputNames,
   ]);
 
   const activePairingsCount = plan.pairings.filter(p => !p.excluded).length;
+  const alreadyDoneCount = useMemo(() => {
+    return plan.pairings.filter(p => p.alreadyDone).length;
+  }, [plan.pairings]);
 
   const handleToggleExclude = (id: string) =>
     setManualExclusions(prev => ({ ...prev, [id]: !prev[id] }));
@@ -181,6 +218,19 @@ export const BulkScanView: React.FC<BulkScanViewProps> = ({
     const updates: Record<string, boolean> = {};
     plan.pairings.forEach(p => { updates[p.id] = !select; });
     setManualExclusions(updates);
+  };
+
+  const handleToggleSkipAlreadyDone = (skip: boolean) => {
+    setSkipAlreadyDone(skip);
+    setManualExclusions(prev => {
+      const next = { ...prev };
+      plan.pairings.forEach(p => {
+        if (p.alreadyDone) {
+          delete next[p.id];
+        }
+      });
+      return next;
+    });
   };
 
   const exportPlan = (format: 'json' | 'csv') => {
@@ -507,12 +557,36 @@ export const BulkScanView: React.FC<BulkScanViewProps> = ({
             <Film className="w-5 h-5" />
             <h3 className="nb-title text-lg">Step 3 &mdash; Check The Pairs</h3>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <label className="flex items-center gap-1.5 cursor-pointer text-xs font-black mr-2 bg-white/80 px-2.5 py-1 border-2 border-black rounded-none shadow-[2px_2px_0_#000]">
+              <input
+                type="checkbox"
+                className="nb-check"
+                checked={skipAlreadyDone}
+                onChange={e => handleToggleSkipAlreadyDone(e.target.checked)}
+              />
+              <span>Skip Already Done</span>
+            </label>
             <button onClick={() => handleSelectAll(true)} className="nb-btn nb-btn-sm nb-btn-white nb-press">Check All</button>
             <button onClick={() => handleSelectAll(false)} className="nb-btn nb-btn-sm nb-btn-white nb-press">Uncheck All</button>
-            <span className="nb-badge nb-badge-black">{activePairingsCount}/{plan.pairings.length} active</span>
+            <span className="nb-badge nb-badge-black">{activePairingsCount}/{plan.pairings.length} to render</span>
           </div>
         </div>
+
+        {alreadyDoneCount > 0 && (
+          <div className="p-3 bg-lime-100 border-b-[3px] border-black flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs font-bold">
+            <div className="flex items-center gap-2">
+              <span className="nb-badge nb-badge-lime font-black">RESUME SCAN</span>
+              <span>
+                {alreadyDoneCount} of {plan.pairings.length} output file{alreadyDoneCount === 1 ? '' : 's'} already exist in the output folder.
+                {skipAlreadyDone ? ' Skipped automatically so you only render what is left.' : ' Re-rendering enabled.'}
+              </span>
+            </div>
+            <span className="text-[11px] font-mono font-bold text-black/70">
+              {plan.pairings.length - alreadyDoneCount} remaining
+            </span>
+          </div>
+        )}
 
         {plan.pairings.length === 0 ? (
           <div className="p-10 text-center bg-white">
@@ -570,9 +644,16 @@ export const BulkScanView: React.FC<BulkScanViewProps> = ({
                       </td>
 
                       <td className="py-2.5 px-4 max-w-[240px]">
-                        <span className="font-mono font-bold truncate block" title={pairing.outputName}>
-                          {pairing.outputName}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono font-bold truncate block" title={pairing.outputName}>
+                            {pairing.outputName}
+                          </span>
+                          {pairing.alreadyDone && (
+                            <span className="nb-badge nb-badge-lime text-[9px] py-0 px-1 font-mono shrink-0" title="Output file already exists in folder">
+                              ✓ Done
+                            </span>
+                          )}
+                        </div>
                         {pairing.confidence !== undefined && pairing.confidence < 1.0 && (
                           <span className="text-[10px] font-bold text-fuchsia-700 block font-mono">
                             name match {Math.round(pairing.confidence * 100)}%
@@ -623,7 +704,7 @@ export const BulkScanView: React.FC<BulkScanViewProps> = ({
             className="nb-btn nb-btn-lg nb-btn-yellow nb-press w-full sm:w-auto"
           >
             <ListPlus className="w-4 h-4" />
-            <span>Queue All ({activePairingsCount} Jobs)</span>
+            <span>Queue Remaining ({activePairingsCount} Jobs)</span>
           </button>
         </div>
       </div>

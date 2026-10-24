@@ -7,6 +7,7 @@ import React, { useState } from 'react';
 import {
   Play,
   Pause,
+  Square,
   Trash2,
   FolderOpen,
   Terminal,
@@ -41,6 +42,7 @@ export interface RenderJob {
 interface QueueViewProps {
   jobs: RenderJob[];
   onStartAll: () => void;
+  onStopAll: () => void;
   onPauseAll: () => void;
   onResumeAll: () => void;
   onStopAfterCurrent: () => void;
@@ -63,6 +65,7 @@ const STATUS_STYLES: Record<RenderJob['status'], { badge: string; bar: string }>
 export const QueueView: React.FC<QueueViewProps> = ({
   jobs,
   onStartAll,
+  onStopAll,
   onPauseAll,
   onResumeAll,
   onStopAfterCurrent,
@@ -127,6 +130,11 @@ export const QueueView: React.FC<QueueViewProps> = ({
                 <Pause className="w-3.5 h-3.5 fill-black" /> Pause
               </button>
             )}
+
+            <button onClick={onStopAll} disabled={!isRendering && !isPaused}
+              className="nb-btn nb-btn-red nb-press disabled:opacity-40 flex items-center gap-1.5" title="Stop Conversion Immediately">
+              <Square className="w-3.5 h-3.5 fill-black" /> Stop Immediately
+            </button>
 
             <button onClick={onStopAfterCurrent} disabled={!isRendering}
               className="nb-btn nb-btn-white nb-press disabled:opacity-40">

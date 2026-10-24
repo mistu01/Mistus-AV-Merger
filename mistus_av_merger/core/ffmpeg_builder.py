@@ -145,11 +145,11 @@ class FFmpegCommandBuilder:
 
         # 1. Resolution scaling (Lanczos + letterbox padding)
         if resolution == "1080p":
-            vfilters.append("scale=1920:1080:force_original_aspect_ratio=decrease:flags=lanczos,pad=1920:1080:(ow-iw)/2:(oh-ih)/2")
+            vfilters.append("scale=1920:1080:force_original_aspect_ratio=decrease:flags=bicubic,pad=1920:1080:(ow-iw)/2:(oh-ih)/2")
         elif resolution == "720p":
-            vfilters.append("scale=1280:720:force_original_aspect_ratio=decrease:flags=lanczos,pad=1280:720:(ow-iw)/2:(oh-ih)/2")
+            vfilters.append("scale=1280:720:force_original_aspect_ratio=decrease:flags=bicubic,pad=1280:720:(ow-iw)/2:(oh-ih)/2")
         elif resolution == "480p":
-            vfilters.append("scale=854:480:force_original_aspect_ratio=decrease:flags=lanczos,pad=854:480:(ow-iw)/2:(oh-ih)/2")
+            vfilters.append("scale=854:480:force_original_aspect_ratio=decrease:flags=bicubic,pad=854:480:(ow-iw)/2:(oh-ih)/2")
 
         # 2. Base VHS filtergraph if specified
         if filtergraph:
@@ -158,13 +158,13 @@ class FFmpegCommandBuilder:
         # 3. Night mode grading
         if night_mode:
             vfilters.append(
-                f"eq=contrast=1.12:brightness=-0.08,curves=all='0/0 0.5/0.4 1/0.95':blue='0/0 0.5/0.58 1/1',vignette=PI/4*{night_intensity:.2f}"
+                f"eq=contrast=1.12:brightness=-0.08,curves=all='0/0 0.5/0.4 1/0.95':blue='0/0 0.5/0.58 1/1',vignette=PI/4*{night_intensity:.2f}:eval=init"
             )
 
         # 4. Noise and static synthesis
         # NOTE: 'seed' option was removed from vf_noise in newer FFmpeg;
         # the channel-level 'all_seed' is the supported alias.
-        if noise_static:
+        if noise_static and "noise=" not in filtergraph:
             vfilters.append(f"noise=alls=18:allf=t+u:all_seed={noise_seed}")
 
         # Combine video filters
@@ -179,7 +179,7 @@ class FFmpegCommandBuilder:
                 f"[0:v]{vf_string}[base];"
                 f"[2:v][base]scale2ref=w=main_w:h=main_h[ovrl][refw];"
                 f"[ovrl]format=rgba,colorchannelmixer=aa={overlay_opacity:.2f}[ovrlA];"
-                f"[refw][ovrlA]overlay=0:0:format=auto[v_out]"
+                f"[refw][ovrlA]overlay=0:0:format=yuv420[v_out]"
             )
             cmd.extend(["-filter_complex", vf_string, "-map", "[v_out]"])
         else:
@@ -221,6 +221,111 @@ class FFmpegCommandBuilder:
         audio_kbps = audio_bitrate_kbps or 192
         cmd.extend(["-c:a", "aac", "-b:a", f"{audio_kbps}k"])
 
+        if threads:
+            cmd.extend(["-threads", str(threads)])
+
+        cmd.extend([
+            "-movflags", "+faststart",
+            "-progress", "pipe:1",
+            str(output_path)
+        ])
+        return cmd
+
+    def build_filtered_loop_clip(
+        self,
+        video_path: Path,
+        output_path: Path,
+        encoder: str = "libx264",
+        resolution: str = "original",
+        filtergraph: str = "",
+        night_mode: bool = False,
+        night_intensity: float = 0.7,
+        noise_static: bool = False,
+        noise_seed: int = 1994,
+        overlay_path: Optional[Path] = None,
+        overlay_opacity: float = 0.8,
+        crf: int = 21,
+        bitrate_kbps: Optional[int] = None,
+        threads: Optional[int] = None,
+        duration_sec: Optional[float] = None,
+    ) -> List[str]:
+        """
+        Builds command to render a single cycle of the filtered video loop without audio.
+        This clip is then instantly stream-copied across the audio duration for 10x-50x speedup.
+        """
+        cmd = [
+            self.ffmpeg_bin,
+            "-y",
+            "-hide_banner",
+            "-loglevel", "error",
+            "-nostdin",
+            "-i", str(video_path),
+        ]
+        if overlay_path and overlay_path.exists():
+            cmd.extend(["-i", str(overlay_path)])
+
+        if duration_sec is not None:
+            cmd.extend(["-t", f"{duration_sec:.3f}"])
+
+        vfilters: List[str] = []
+        if resolution == "1080p":
+            vfilters.append("scale=1920:1080:force_original_aspect_ratio=decrease:flags=bicubic,pad=1920:1080:(ow-iw)/2:(oh-ih)/2")
+        elif resolution == "720p":
+            vfilters.append("scale=1280:720:force_original_aspect_ratio=decrease:flags=bicubic,pad=1280:720:(ow-iw)/2:(oh-ih)/2")
+        elif resolution == "480p":
+            vfilters.append("scale=854:480:force_original_aspect_ratio=decrease:flags=bicubic,pad=854:480:(ow-iw)/2:(oh-ih)/2")
+
+        if filtergraph:
+            vfilters.append(filtergraph)
+
+        if night_mode:
+            vfilters.append(
+                f"eq=contrast=1.12:brightness=-0.08,curves=all='0/0 0.5/0.4 1/0.95':blue='0/0 0.5/0.58 1/1',vignette=PI/4*{night_intensity:.2f}:eval=init"
+            )
+
+        if noise_static and "noise=" not in filtergraph:
+            vfilters.append(f"noise=alls=16:allf=t+u:all_seed={noise_seed}")
+
+        vf_string = ",".join(vfilters) if vfilters else "null"
+
+        if overlay_path and overlay_path.exists():
+            vf_string = (
+                f"[0:v]{vf_string}[base];"
+                f"[1:v][base]scale2ref=w=main_w:h=main_h[ovrl][refw];"
+                f"[ovrl]format=rgba,colorchannelmixer=aa={overlay_opacity:.2f}[ovrlA];"
+                f"[refw][ovrlA]overlay=0:0:format=yuv420[v_out]"
+            )
+            cmd.extend(["-filter_complex", vf_string, "-map", "[v_out]"])
+        else:
+            cmd.extend(["-vf", vf_string, "-map", "0:v:0"])
+
+        cmd.extend(["-c:v", encoder])
+        if bitrate_kbps:
+            if "videotoolbox" in encoder:
+                cmd.extend(["-b:v", f"{bitrate_kbps}k"])
+            elif "libx265" in encoder:
+                cmd.extend(["-b:v", f"{bitrate_kbps}k", "-preset", "fast"])
+            elif "nvenc" in encoder:
+                cmd.extend(["-b:v", f"{bitrate_kbps}k", "-maxrate", f"{bitrate_kbps * 2}k",
+                            "-bufsize", f"{bitrate_kbps * 4}k", "-preset", "p4"])
+            elif "qsv" in encoder:
+                cmd.extend(["-b:v", f"{bitrate_kbps}k", "-maxrate", f"{bitrate_kbps * 2}k",
+                            "-bufsize", f"{bitrate_kbps * 4}k", "-preset", self._QSV_PRESET])
+            else:
+                cmd.extend(["-b:v", f"{bitrate_kbps}k", "-maxrate", f"{bitrate_kbps * 2}k",
+                            "-bufsize", f"{bitrate_kbps * 4}k", "-preset", self._X264_PRESET])
+        elif "nvenc" in encoder:
+            cmd.extend(["-cq", str(crf), "-preset", "p4"])
+        elif "qsv" in encoder:
+            cmd.extend(["-global_quality", str(crf), "-preset", self._QSV_PRESET])
+        elif "videotoolbox" in encoder:
+            cmd.extend(["-q:v", str(crf * 3)])
+        elif "libx265" in encoder:
+            cmd.extend(["-crf", str(crf + 3), "-preset", "fast"])
+        else:
+            cmd.extend(["-crf", str(crf), "-preset", self._X264_PRESET])
+
+        cmd.append("-an")
         if threads:
             cmd.extend(["-threads", str(threads)])
 

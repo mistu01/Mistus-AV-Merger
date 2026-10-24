@@ -161,7 +161,7 @@ def test_build_reencode_render_full_screen_overlay(tmp_path):
     # pixfmt selector, not opacity).
     assert "[2:v][base]scale2ref=" in graph
     assert "colorchannelmixer=aa=0.65" in graph
-    assert "[refw][ovrlA]overlay=0:0:format=auto[v_out]" in graph
+    assert "[refw][ovrlA]overlay=0:0:format=yuv420[v_out]" in graph
     assert "alpha=" not in graph
 
 
@@ -230,3 +230,18 @@ def test_build_reencode_render_bitrate_cap_nvenc_drops_cq():
     assert cmd[cmd.index("-b:v") + 1] == "400k"
     # Default audio bitrate when no tier audio given
     assert cmd[cmd.index("-b:a") + 1] == "192k"
+
+
+def test_build_filtered_loop_clip():
+    builder = FFmpegCommandBuilder(ffmpeg_bin="ffmpeg")
+    cmd = builder.build_filtered_loop_clip(
+        video_path=Path("/media/clip.mp4"),
+        output_path=Path("/tmp/loop.mp4"),
+        encoder="libx264",
+        duration_sec=5.0,
+        filtergraph="avgblur=sizeX=2:sizeY=2",
+    )
+    assert "-an" in cmd
+    assert cmd[cmd.index("-t") + 1] == "5.000"
+    assert cmd[cmd.index("-c:v") + 1] == "libx264"
+    assert "avgblur=sizeX=2:sizeY=2" in cmd[cmd.index("-vf") + 1]

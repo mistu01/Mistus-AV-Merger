@@ -45,10 +45,16 @@ export default function App() {
   const [selectedAudio, setSelectedAudio] = useState<MediaProbe | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<MediaProbe | null>(null);
 
-  // Folders — defaulted from the server's real home directory
-  const [audioFolder, setAudioFolder] = useState('');
-  const [videoFolder, setVideoFolder] = useState('');
-  const [outputFolder, setOutputFolder] = useState('');
+  // Folders — defaulted from saved settings or the server's real home directory
+  const [audioFolder, setAudioFolder] = useState(() => {
+    try { return localStorage.getItem('mistus_last_audio_folder') || ''; } catch { return ''; }
+  });
+  const [videoFolder, setVideoFolder] = useState(() => {
+    try { return localStorage.getItem('mistus_last_video_folder') || ''; } catch { return ''; }
+  });
+  const [outputFolder, setOutputFolder] = useState(() => {
+    try { return localStorage.getItem('mistus_last_output_folder') || ''; } catch { return ''; }
+  });
   const [tempFolder, setTempFolder] = useState('');
 
   // Tuning & Profiles
@@ -87,7 +93,24 @@ export default function App() {
   // Hardware summary (real automatic CPU/GPU detection from the backend)
   const [hwSummary, setHwSummary] = useState<HardwareSummary | null>(null);
   // Bulk-mode overlay image folder (one random image per render, backend-side)
-  const [overlayImageFolder, setOverlayImageFolder] = useState('');
+  const [overlayImageFolder, setOverlayImageFolder] = useState(() => {
+    try { return localStorage.getItem('mistus_last_overlay_folder') || ''; } catch { return ''; }
+  });
+
+  const updateSettings = (patch: Record<string, unknown>) => {
+    try {
+      for (const [k, v] of Object.entries(patch)) {
+        if (typeof v === 'string') localStorage.setItem(`mistus_${k}`, v);
+      }
+    } catch {
+      /* ignore storage errors */
+    }
+    fetch(`${API}/api/v1/settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    }).catch(() => undefined);
+  };
 
   // Load real version + home directory defaults + hardware + saved settings
   useEffect(() => {
@@ -97,18 +120,59 @@ export default function App() {
 
       const listing = await getJson<{ shortcuts: Array<{ label: string; path: string }> }>('/api/v1/fs/list');
       const home = listing?.shortcuts?.find(s => s.label === 'Home')?.path || '';
-      if (home) {
+
+      const appSettings = await getJson<Record<string, any>>('/api/v1/settings');
+      if (appSettings) {
+        if (appSettings.last_audio_folder) setAudioFolder(appSettings.last_audio_folder);
+        else if (home) setAudioFolder(prev => prev || home);
+
+        if (appSettings.last_video_folder) setVideoFolder(appSettings.last_video_folder);
+        else if (home) setVideoFolder(prev => prev || home);
+
+        if (appSettings.last_output_folder) setOutputFolder(appSettings.last_output_folder);
+        else if (home) setOutputFolder(prev => prev || `${home}/MistusRenders`);
+
+        if (appSettings.last_overlay_folder) {
+          setOverlayImageFolder(appSettings.last_overlay_folder);
+          setRenderOptions(prev => ({ ...prev, overlayFolder: appSettings.last_overlay_folder }));
+        }
+
+        if (appSettings.cpu_profile) setCpuProfile(appSettings.cpu_profile);
+        if (appSettings.concurrency) setConcurrency(appSettings.concurrency);
+        if (appSettings.segment_duration_sec) setSegmentDuration(appSettings.segment_duration_sec);
+
+        if (appSettings.last_single_audio) {
+          fetch(`${API}/api/v1/fs/probe`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: appSettings.last_single_audio }),
+          }).then(r => (r.ok ? r.json() : null)).then(probe => {
+            if (probe) setSelectedAudio(probe);
+          }).catch(() => {});
+        }
+
+        if (appSettings.last_single_video) {
+          fetch(`${API}/api/v1/fs/probe`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: appSettings.last_single_video }),
+          }).then(r => (r.ok ? r.json() : null)).then(probe => {
+            if (probe) setSelectedVideo(probe);
+          }).catch(() => {});
+        }
+
+        if (appSettings.last_single_overlay) {
+          setRenderOptions(prev => ({
+            ...prev,
+            overlayEnabled: true,
+            overlayPath: appSettings.last_single_overlay,
+          }));
+        }
+      } else if (home) {
         setAudioFolder(prev => prev || home);
         setVideoFolder(prev => prev || home);
         setOutputFolder(prev => prev || `${home}/MistusRenders`);
         setTempFolder(prev => prev || `${home}/MistusRenders/.tmp`);
-      }
-
-      const settings = await getJson<{ cpu_profile: string; concurrency: number }>('/api/v1/queue/settings');
-      if (settings) {
-        const profile = settings.cpu_profile as typeof cpuProfile;
-        if (profile) setCpuProfile(profile);
-        if (settings.concurrency) setConcurrency(settings.concurrency);
       }
     })();
   }, []);
@@ -144,11 +208,13 @@ export default function App() {
   const handleCpuProfileChange = (profile: typeof cpuProfile) => {
     setCpuProfile(profile);
     persistQueueSettings(profile);
+    updateSettings({ cpu_profile: profile });
   };
 
   const handleConcurrencyChange = (value: number) => {
     setConcurrency(value);
     persistQueueSettings(undefined, value);
+    updateSettings({ concurrency: value });
   };
 
   // Handlers
@@ -158,32 +224,77 @@ export default function App() {
     setIsBrowserOpen(true);
   };
 
-  const handleSelectPath = (path: string, probe?: MediaProbe) => {
+  const getInitialBrowserPath = () => {
     switch (browserTarget) {
       case 'single_audio':
-        if (probe) setSelectedAudio(probe);
+        return selectedAudio?.path
+          ? selectedAudio.path.replace(/[/\\][^/\\]+$/, '')
+          : (audioFolder || undefined);
+      case 'single_video':
+        return selectedVideo?.path
+          ? selectedVideo.path.replace(/[/\\][^/\\]+$/, '')
+          : (videoFolder || undefined);
+      case 'single_image':
+        return renderOptions.overlayPath
+          ? renderOptions.overlayPath.replace(/[/\\][^/\\]+$/, '')
+          : (overlayImageFolder || undefined);
+      case 'bulk_audio':
+        return audioFolder || undefined;
+      case 'bulk_video':
+        return videoFolder || undefined;
+      case 'bulk_images':
+        return overlayImageFolder || undefined;
+      case 'folder':
+      case 'output':
+        return outputFolder || undefined;
+      default:
+        return undefined;
+    }
+  };
+
+  const handleSelectPath = (path: string, probe?: MediaProbe) => {
+    const parentDir = path.includes('/') || path.includes('\\')
+      ? path.replace(/[/\\][^/\\]+$/, '')
+      : path;
+
+    switch (browserTarget) {
+      case 'single_audio':
+        if (probe) {
+          setSelectedAudio(probe);
+          updateSettings({ last_single_audio: path, last_audio_folder: parentDir });
+          if (!audioFolder) setAudioFolder(parentDir);
+        }
         break;
       case 'single_video':
-        if (probe) setSelectedVideo(probe);
+        if (probe) {
+          setSelectedVideo(probe);
+          updateSettings({ last_single_video: path, last_video_folder: parentDir });
+          if (!videoFolder) setVideoFolder(parentDir);
+        }
         break;
       case 'single_image':
         // Single mode: one picked image, full-screen overlay with opacity
         setRenderOptions(prev => ({ ...prev, overlayEnabled: true, overlayPath: path, overlayFolder: undefined }));
+        updateSettings({ last_single_overlay: path, last_overlay_folder: parentDir });
         break;
       case 'bulk_images':
         // Bulk mode: a folder; the backend stamps a random image per render
         setOverlayImageFolder(path);
         setRenderOptions(prev => ({ ...prev, overlayEnabled: true, overlayFolder: path, overlayPath: undefined }));
+        updateSettings({ last_overlay_folder: path });
         break;
       case 'folder':
       case 'output':
         setOutputFolder(path);
+        updateSettings({ last_output_folder: path });
         break;
       case 'bulk_audio':
         setAudioFolder(path);
+        updateSettings({ last_audio_folder: path });
         break;
       case 'bulk_video':
         setVideoFolder(path);
+        updateSettings({ last_video_folder: path });
         break;
     }
   };
@@ -297,6 +408,8 @@ export default function App() {
 
   const handleStartAll = () => postQueueCommand('start');
 
+  const handleStopAll = () => postQueueCommand('stop-all');
+
   const handlePauseAll = () => postQueueCommand('pause');
 
   const handleResumeAll = () => postQueueCommand('resume');
@@ -389,6 +502,7 @@ export default function App() {
           <QueueView
             jobs={jobs}
             onStartAll={handleStartAll}
+            onStopAll={handleStopAll}
             onPauseAll={handlePauseAll}
             onResumeAll={handleResumeAll}
             onStopAfterCurrent={handleStopAfterCurrent}
@@ -422,6 +536,7 @@ export default function App() {
         onClose={() => setIsBrowserOpen(false)}
         title={browserTitle}
         targetType={browserTarget}
+        initialPath={getInitialBrowserPath()}
         onSelectPath={handleSelectPath}
       />
 
@@ -439,11 +554,17 @@ export default function App() {
         concurrency={concurrency}
         onConcurrencyChange={handleConcurrencyChange}
         outputFolder={outputFolder}
-        setOutputFolder={setOutputFolder}
+        setOutputFolder={(path) => {
+          setOutputFolder(path);
+          updateSettings({ last_output_folder: path });
+        }}
         tempFolder={tempFolder}
         setTempFolder={setTempFolder}
         segmentDuration={segmentDuration}
-        setSegmentDuration={setSegmentDuration}
+        setSegmentDuration={(sec) => {
+          setSegmentDuration(sec);
+          updateSettings({ segment_duration_sec: sec });
+        }}
         hwSummary={hwSummary}
       />
 
