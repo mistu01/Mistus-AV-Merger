@@ -326,7 +326,7 @@ export const BulkScanView: React.FC<BulkScanViewProps> = ({
             </button>
           </div>
           {renderOptions.overlayEnabled && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-nb-pop">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-nb-pop">
               <div>
                 <span className="nb-label">Overlay Images Folder</span>
                 {overlayImageFolder ? (
@@ -339,7 +339,7 @@ export const BulkScanView: React.FC<BulkScanViewProps> = ({
                   </div>
                 )}
                 <p className="text-[10px] font-semibold text-black/50 mt-1">
-                  JPG, PNG, WEBP, BMP, GIF &bull; picked randomly, per render, on the server.
+                  JPG, PNG, WEBP, BMP, GIF &bull; fits full frame.
                 </p>
               </div>
               <div className="space-y-1">
@@ -355,7 +355,25 @@ export const BulkScanView: React.FC<BulkScanViewProps> = ({
                   onChange={e => setRenderOptions(prev => ({ ...prev, overlayOpacity: parseInt(e.target.value, 10) / 100 }))}
                   className="nb-range w-full"
                 />
-                <p className="nb-sub">Stretched over the whole video frame, blended at this opacity.</p>
+                <p className="nb-sub">Blended over video at this opacity.</p>
+              </div>
+              <div className="space-y-1">
+                <span className="nb-label">Overlay Duration</span>
+                <select
+                  value={renderOptions.overlayTimeout ?? 'full'}
+                  onChange={e => {
+                    const val = e.target.value === 'full' ? 'full' : Number(e.target.value);
+                    setRenderOptions(prev => ({ ...prev, overlayTimeout: val }));
+                  }}
+                  className="nb-select w-full"
+                >
+                  <option value="full">Fulltime (Entire Video)</option>
+                  <option value="30">First 30 Seconds</option>
+                  <option value="60">First 1 Minute</option>
+                  <option value="120">First 2 Minutes</option>
+                  <option value="300">First 5 Minutes</option>
+                </select>
+                <p className="nb-sub">Disappears after this duration.</p>
               </div>
             </div>
           )}

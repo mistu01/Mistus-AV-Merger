@@ -603,9 +603,20 @@ def _execute_job(job: RenderJob):
             audio_dur = float(job.duration or 0.0)
             encoder = str(opts.get("encoder") or _pick_encoder())
 
+            overlay_timeout = opts.get("overlayTimeout")
+            has_timed_overlay = False
+            if opts.get("overlayPath") and overlay_timeout is not None:
+                str_timeout = str(overlay_timeout).strip().lower()
+                if str_timeout not in ("full", "0", ""):
+                    try:
+                        has_timed_overlay = float(str_timeout) > 0
+                    except ValueError:
+                        pass
+
             # Fast loop-aware pipeline: if video clip is shorter than audio, render the filtered loop once,
             # then stream-copy loop it across the full audio for 10x-50x speed!
-            if video_dur > 0 and audio_dur > (video_dur * 1.05):
+            # Timed overlays (e.g. first 30s only) change visual content over time, so they use direct encode.
+            if not has_timed_overlay and video_dur > 0 and audio_dur > (video_dur * 1.05):
                 loop_dur = min(audio_dur, max(video_dur, 5.0))
                 from mistus_av_merger.config import get_temp_dir
                 temp_loop = get_temp_dir() / f"filtered_loop_{job.job_id}.mp4"
@@ -675,6 +686,7 @@ def _execute_job(job: RenderJob):
                     noise_seed=int(opts.get("noiseSeed") or 1994),
                     overlay_path=Path(str(opts.get("overlayPath"))) if opts.get("overlayPath") else None,
                     overlay_opacity=float(opts.get("overlayOpacity", 0.8)),
+                    overlay_timeout=opts.get("overlayTimeout"),
                     duration_sec=job.duration or None,
                     bitrate_kbps=int(opts["videoBitrateKbps"]) if opts.get("videoBitrateKbps") else None,
                     audio_bitrate_kbps=int(opts["audioBitrateKbps"]) if opts.get("audioBitrateKbps") else None,

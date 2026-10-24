@@ -159,7 +159,7 @@ def test_build_reencode_render_full_screen_overlay(tmp_path):
     # scale2ref stretches the image over the whole base frame; opacity is
     # applied by scaling the alpha channel (overlay's own 'alpha' opts is a
     # pixfmt selector, not opacity).
-    assert "[2:v][base]scale2ref=" in graph
+    assert "[2:v][base]scale2ref=w=rw:h=rh" in graph
     assert "colorchannelmixer=aa=0.65" in graph
     assert "[refw][ovrlA]overlay=0:0:format=yuv420[v_out]" in graph
     assert "alpha=" not in graph
@@ -245,3 +245,22 @@ def test_build_filtered_loop_clip():
     assert cmd[cmd.index("-t") + 1] == "5.000"
     assert cmd[cmd.index("-c:v") + 1] == "libx264"
     assert "avgblur=sizeX=2:sizeY=2" in cmd[cmd.index("-vf") + 1]
+
+
+def test_build_reencode_render_overlay_timeout(tmp_path):
+    image = tmp_path / "stamp.png"
+    image.write_bytes(b"\x89PNG\r\n\x1a\nstub")
+    builder = FFmpegCommandBuilder(ffmpeg_bin="ffmpeg")
+    cmd = builder.build_reencode_render(
+        video_path=Path("/media/clip.mp4"),
+        audio_path=Path("/media/song.mp3"),
+        output_path=Path("/renders/output.mp4"),
+        encoder="libx264",
+        overlay_path=image,
+        overlay_opacity=0.8,
+        overlay_timeout=30,
+    )
+    idx_fc = cmd.index("-filter_complex")
+    graph = cmd[idx_fc + 1]
+    assert ":enable='lte(t,30.00)'" in graph
+    assert "[2:v][base]scale2ref=w=rw:h=rh" in graph

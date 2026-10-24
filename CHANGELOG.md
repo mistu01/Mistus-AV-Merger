@@ -9,8 +9,11 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ## [Unreleased]
 
-### Planned
-- (nothing yet)
+### Added
+- **Image Overlay Timeout Options**: Choose display duration for image overlays (`First 30 Seconds`, `First 1 Minute`, `First 2 Minutes`, `First 5 Minutes`, or `Fulltime`). Timed overlays automatically disappear after the specified duration, returning to the video.
+
+### Fixed
+- **Full-Frame Image Overlay Scaling**: Fixed image overlay scaling from `scale2ref=w=main_w:h=main_h` to `scale2ref=w=rw:h=rh`. Overlays now stretch and fit the entire video frame from edge to edge regardless of image dimensions or aspect ratio.
 
 ---
 

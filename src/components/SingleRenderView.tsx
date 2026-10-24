@@ -372,7 +372,7 @@ export const SingleRenderView: React.FC<SingleRenderViewProps> = ({
           </div>
 
           {renderOptions.overlayEnabled && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-nb-pop">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-nb-pop">
               <div>
                 <span className="nb-label">Overlay Image</span>
                 {overlayName ? (
@@ -384,6 +384,7 @@ export const SingleRenderView: React.FC<SingleRenderViewProps> = ({
                     No image picked yet — click &ldquo;Pick Image&rdquo;
                   </div>
                 )}
+                <p className="nb-sub mt-1">Fits the entire frame regardless of resolution.</p>
               </div>
               <div className="space-y-1">
                 <div className="flex justify-between font-bold">
@@ -398,7 +399,25 @@ export const SingleRenderView: React.FC<SingleRenderViewProps> = ({
                   onChange={e => setRenderOptions(prev => ({ ...prev, overlayOpacity: parseInt(e.target.value, 10) / 100 }))}
                   className="nb-range w-full"
                 />
-                <p className="nb-sub">Stretched over the whole video frame, blended at this opacity.</p>
+                <p className="nb-sub">Blended over video at this opacity.</p>
+              </div>
+              <div className="space-y-1">
+                <span className="nb-label">Overlay Duration</span>
+                <select
+                  value={renderOptions.overlayTimeout ?? 'full'}
+                  onChange={e => {
+                    const val = e.target.value === 'full' ? 'full' : Number(e.target.value);
+                    setRenderOptions(prev => ({ ...prev, overlayTimeout: val }));
+                  }}
+                  className="nb-select w-full"
+                >
+                  <option value="full">Fulltime (Entire Video)</option>
+                  <option value="30">First 30 Seconds</option>
+                  <option value="60">First 1 Minute</option>
+                  <option value="120">First 2 Minutes</option>
+                  <option value="300">First 5 Minutes</option>
+                </select>
+                <p className="nb-sub">Disappears after this duration.</p>
               </div>
             </div>
           )}

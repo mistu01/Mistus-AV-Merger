@@ -5,7 +5,7 @@ Produces safe, list-based argument arrays without shell injection risks.
 
 from math import ceil
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 
 class FFmpegCommandBuilder:
@@ -106,6 +106,7 @@ class FFmpegCommandBuilder:
         noise_seed: int = 1994,
         overlay_path: Optional[Path] = None,
         overlay_opacity: float = 0.8,
+        overlay_timeout: Optional[Union[int, float, str]] = None,
         crf: int = 21,
         bitrate_kbps: Optional[int] = None,
         audio_bitrate_kbps: Optional[int] = None,
@@ -175,11 +176,22 @@ class FFmpegCommandBuilder:
         # FORMAT selector, not opacity — real blending requires pre-scaled
         # alpha via colorchannelmixer (scale2ref input order: overlay first).
         if overlay_path and overlay_path.exists():
+            enable_clause = ""
+            if overlay_timeout is not None:
+                str_timeout = str(overlay_timeout).strip().lower()
+                if str_timeout not in ("full", "0", ""):
+                    try:
+                        t_sec = float(str_timeout)
+                        if t_sec > 0:
+                            enable_clause = f":enable='lte(t,{t_sec:.2f})'"
+                    except ValueError:
+                        pass
+
             vf_string = (
                 f"[0:v]{vf_string}[base];"
-                f"[2:v][base]scale2ref=w=main_w:h=main_h[ovrl][refw];"
+                f"[2:v][base]scale2ref=w=rw:h=rh[ovrl][refw];"
                 f"[ovrl]format=rgba,colorchannelmixer=aa={overlay_opacity:.2f}[ovrlA];"
-                f"[refw][ovrlA]overlay=0:0:format=yuv420[v_out]"
+                f"[refw][ovrlA]overlay=0:0:format=yuv420{enable_clause}[v_out]"
             )
             cmd.extend(["-filter_complex", vf_string, "-map", "[v_out]"])
         else:
@@ -291,7 +303,7 @@ class FFmpegCommandBuilder:
         if overlay_path and overlay_path.exists():
             vf_string = (
                 f"[0:v]{vf_string}[base];"
-                f"[1:v][base]scale2ref=w=main_w:h=main_h[ovrl][refw];"
+                f"[1:v][base]scale2ref=w=rw:h=rh[ovrl][refw];"
                 f"[ovrl]format=rgba,colorchannelmixer=aa={overlay_opacity:.2f}[ovrlA];"
                 f"[refw][ovrlA]overlay=0:0:format=yuv420[v_out]"
             )

@@ -45,6 +45,7 @@ export interface RenderOptions {
   overlayPath?: string;
   overlayFolder?: string;
   overlayOpacity?: number;
+  overlayTimeout?: number | 'full';
   encoderChoice?: string;
   crf?: number;
   sizeTarget?: 'small' | 'balanced' | 'high' | 'unlimited';

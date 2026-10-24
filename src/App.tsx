@@ -72,6 +72,7 @@ export default function App() {
     noiseSeed: 1994,
     overlayEnabled: false,
     overlayOpacity: 0.8,
+    overlayTimeout: 'full',
     sizeTarget: 'balanced',
   });
 
