@@ -14,6 +14,32 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ---
 
+## [0.6.11] - 2026-10-24
+
+### Added
+- **Centralized Render Options Tab**:
+  - Renamed 'VHS & Night FX' tab to **'Render Options'**, serving as the single unified control center for all render settings across Single and Bulk modes.
+  - Consolidated Resolution scaling (`original`, `1080p`, `720p`, `480p`) and Output Size / Bitrate targets (`small`, `balanced`, `high`, `unlimited`) into this tab.
+  - Consolidated Image Overlay configuration (Single file picker, Bulk folder picker, opacity slider, timeout/duration dropdown) with edge-to-edge frame fitting.
+  - Added live 60 FPS filtergraph simulation canvas and compiled FFmpeg `-vf` filter chain inspector.
+  - Added quick navigation buttons to jump directly back to Single Render or Bulk Scan.
+- **Dedicated Clear Queue Action**:
+  - Added 'Clear Queue' button in Queue view to immediately wipe all queued jobs and terminate any active background render.
+  - Added `POST /api/v1/queue/clear` and `POST /api/v1/queue/clear-all` endpoints that clean up partial output files, clear the queue manager, and persist the empty session.
+- **Pre-Render Effect Warning Banners**:
+  - Added prominent Neo-Brutalist warning banners in Single Render and Bulk Scan modes.
+  - Clearly alerts users when no visual effects are active, indicating that renders will use Fast Stream Copy (lossless, instant ~300-700x).
+  - Prompts users with a direct "Open Render Options" shortcut button to configure effects before choosing media or scanning.
+  - Displays active effect tags and "Re-Encode Mode" confirmation when visual filters, resolution scaling, or overlays are enabled.
+
+### Fixed
+- **Queue Effects Passing & Mode Desync**:
+  - Fixed issue where Bulk Scan displayed `RE-ENCODE` while Queue mode executed jobs with `COPY` without applying visual effects.
+  - Automatically promote queued jobs to `mode: "encode"` whenever visual effects, VHS presets, night mode, noise, resolution scaling, or image overlays are present.
+  - Resolved session persistence race condition in active queue state.
+
+---
+
 ## [0.6.10] - 2026-10-24
 
 ### Added
