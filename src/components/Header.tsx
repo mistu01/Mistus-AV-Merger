@@ -31,7 +31,7 @@ interface HeaderProps {
 const TABS: Array<{ id: HeaderProps['activeTab']; label: string; icon: React.ReactNode; color: string }> = [
   { id: 'single', label: 'Single', icon: <Film className="w-4 h-4" />, color: 'bg-yellow-300' },
   { id: 'bulk', label: 'Bulk Auto-Pair', icon: <Sliders className="w-4 h-4" />, color: 'bg-pink-400' },
-  { id: 'effects', label: 'VHS & Night FX', icon: <Sparkles className="w-4 h-4" />, color: 'bg-lime-300' },
+  { id: 'effects', label: 'Render Options', icon: <Sparkles className="w-4 h-4" />, color: 'bg-lime-300' },
   { id: 'queue', label: 'Queue', icon: <ListOrdered className="w-4 h-4" />, color: 'bg-cyan-300' },
 ];
 

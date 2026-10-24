@@ -20,6 +20,8 @@ import {
   ChevronDown,
   Loader2,
   Image as ImageIcon,
+  Sparkles,
+  ArrowRight,
 } from 'lucide-react';
 import {
   MediaProbe,
@@ -40,6 +42,7 @@ interface BulkScanViewProps {
   videoFolder: string;
   outputFolder: string;
   overlayImageFolder: string;
+  onNavigateToRenderOptions?: () => void;
 }
 
 const API = '';
@@ -78,6 +81,7 @@ export const BulkScanView: React.FC<BulkScanViewProps> = ({
   videoFolder,
   outputFolder,
   overlayImageFolder,
+  onNavigateToRenderOptions,
 }) => {
   const [sameFolder, setSameFolder] = useState(false);
   const [recursive, setRecursive] = useState(false);
@@ -89,6 +93,14 @@ export const BulkScanView: React.FC<BulkScanViewProps> = ({
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [skipAlreadyDone, setSkipAlreadyDone] = useState(true);
   const [existingOutputNames, setExistingOutputNames] = useState<Set<string>>(new Set());
+
+  const hasEffects = Boolean(
+    (renderOptions.resolution && renderOptions.resolution !== 'original') ||
+    (renderOptions.vhsPreset && renderOptions.vhsPreset !== 'none' && renderOptions.vhsPreset !== 'off') ||
+    renderOptions.nightModeEnabled ||
+    renderOptions.noiseStaticEnabled ||
+    (renderOptions.overlayEnabled && (renderOptions.overlayPath || overlayImageFolder || renderOptions.overlayFolder))
+  );
 
   const [scannedAudio, setScannedAudio] = useState<MediaProbe[]>([]);
   const [scannedVideo, setScannedVideo] = useState<MediaProbe[]>([]);
@@ -167,12 +179,17 @@ export const BulkScanView: React.FC<BulkScanViewProps> = ({
 
   // Generate pairing plan (client engine, same logic used by tests)
   const plan = useMemo(() => {
+    const effectiveRenderOptions: RenderOptions = {
+      ...renderOptions,
+      ...(renderOptions.overlayEnabled && overlayImageFolder ? { overlayFolder: overlayImageFolder } : {}),
+    };
+
     const rawPlan = autoPair(scannedAudio, scannedVideo, pairingMode, {
       singleVideoId: singleVideoId || undefined,
       namingTemplate,
       seed: randomSeed,
       fuzzyConfidenceThreshold,
-      renderOptions,
+      renderOptions: effectiveRenderOptions,
     });
 
     const modifiedPairings = rawPlan.pairings.map(p => {
@@ -185,7 +202,16 @@ export const BulkScanView: React.FC<BulkScanViewProps> = ({
         const found = scannedVideo.find(v => v.path === overrideVideoPath);
         if (found) currentVideo = found;
       }
-      return { ...p, video: currentVideo, excluded: isExcluded, alreadyDone: isAlreadyDone };
+      const effectiveMode = hasEffects ? 'encode' : p.mode;
+      const effectiveReason = hasEffects ? 'Visual effects active (re-encode required)' : p.modeReason;
+      return {
+        ...p,
+        video: currentVideo,
+        excluded: isExcluded,
+        alreadyDone: isAlreadyDone,
+        mode: effectiveMode,
+        modeReason: effectiveReason,
+      };
     });
 
     const resolved = resolveCollisions(modifiedPairings, collisionPolicy);
@@ -199,6 +225,8 @@ export const BulkScanView: React.FC<BulkScanViewProps> = ({
     randomSeed,
     fuzzyConfidenceThreshold,
     renderOptions,
+    overlayImageFolder,
+    hasEffects,
     manualExclusions,
     manualVideoOverrides,
     collisionPolicy,
@@ -258,6 +286,75 @@ export const BulkScanView: React.FC<BulkScanViewProps> = ({
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      {/* Mode & Effects Warning Banner */}
+      {hasEffects ? (
+        <div className="border-[3px] border-black bg-lime-200 p-4 shadow-[4px_4px_0_#000] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-nb-fade">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-black shrink-0" />
+              <h4 className="text-xs font-black uppercase tracking-wider text-black">
+                ✨ Visual Effects Active &mdash; Bulk Re-Encode Mode
+              </h4>
+            </div>
+            <p className="text-xs font-semibold text-black/80">
+              All scanned pairs will be queued for Re-Encode using active filters configured in Render Options.
+            </p>
+            <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-mono font-bold pt-1">
+              {renderOptions.resolution !== 'original' && (
+                <span className="nb-badge nb-badge-yellow">Scale: {renderOptions.resolution}</span>
+              )}
+              {renderOptions.sizeTarget && renderOptions.sizeTarget !== 'balanced' && (
+                <span className="nb-badge">Target: {renderOptions.sizeTarget}</span>
+              )}
+              {renderOptions.vhsPreset && renderOptions.vhsPreset !== 'none' && renderOptions.vhsPreset !== 'off' && (
+                <span className="nb-badge nb-badge-cyan">VHS: {renderOptions.vhsPreset}</span>
+              )}
+              {renderOptions.nightModeEnabled && (
+                <span className="nb-badge nb-badge-lime">Night Mode</span>
+              )}
+              {renderOptions.noiseStaticEnabled && (
+                <span className="nb-badge">Noise &amp; Static</span>
+              )}
+              {renderOptions.overlayEnabled && (
+                <span className="nb-badge nb-badge-pink">Image Overlay</span>
+              )}
+            </div>
+          </div>
+
+          {onNavigateToRenderOptions && (
+            <button
+              onClick={onNavigateToRenderOptions}
+              className="nb-btn nb-btn-sm nb-btn-white nb-press shrink-0 flex items-center gap-1.5 text-xs font-black"
+            >
+              <Sliders className="w-3.5 h-3.5" /> Edit Render Options <ArrowRight className="w-3 h-3 ml-0.5" />
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="border-[3px] border-black bg-amber-200 p-4 shadow-[4px_4px_0_#000] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-nb-fade">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-black shrink-0" />
+              <h4 className="text-xs font-black uppercase tracking-wider text-black">
+                ⚠️ No visual effects enabled &mdash; Fast Stream Copy Mode
+              </h4>
+            </div>
+            <p className="text-xs font-semibold text-black/80">
+              All scanned pairs will render via lossless stream copy (~300-700x speed). To apply VHS tape effects, noise, resolution scaling, or image overlays, turn them on in the <strong>Render Options</strong> tab before scanning.
+            </p>
+          </div>
+
+          {onNavigateToRenderOptions && (
+            <button
+              onClick={onNavigateToRenderOptions}
+              className="nb-btn nb-btn-sm nb-btn-yellow nb-press shrink-0 flex items-center gap-1.5 text-xs font-black"
+            >
+              <Sliders className="w-3.5 h-3.5" /> Open Render Options <ArrowRight className="w-3 h-3 ml-0.5" />
+            </button>
+          )}
+        </div>
+      )}
+
       {/* STEP 1 — Folders */}
       <div className="nb-card p-6 space-y-5">
         <div className="nb-stripe h-2 w-24" />
@@ -301,82 +398,6 @@ export const BulkScanView: React.FC<BulkScanViewProps> = ({
               </button>
             </div>
           </div>
-        </div>
-
-        {/* Overlay image folder (optional, random pick per render) */}
-        <div className="border-[3px] border-black p-4 space-y-3 bg-[#f4efe7]">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <label className="flex items-center gap-2 cursor-pointer text-xs font-bold">
-              <input
-                type="checkbox"
-                className="nb-check"
-                checked={!!renderOptions.overlayEnabled}
-                onChange={e => setRenderOptions(prev => ({ ...prev, overlayEnabled: e.target.checked }))}
-              />
-              <ImageIcon className="w-4 h-4" />
-              <span className="font-black uppercase">Image Overlay — Random From Folder</span>
-            </label>
-            <button
-              onClick={() => onOpenFolderBrowser('bulk_images')}
-              disabled={!renderOptions.overlayEnabled}
-              className="nb-btn nb-btn-sm nb-btn-cyan nb-press disabled:opacity-40"
-            >
-              <ImageIcon className="w-3.5 h-3.5" />
-              {overlayImageFolder ? 'Change Folder' : 'Pick Image Folder'}
-            </button>
-          </div>
-          {renderOptions.overlayEnabled && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-nb-pop">
-              <div>
-                <span className="nb-label">Overlay Images Folder</span>
-                {overlayImageFolder ? (
-                  <div className="nb-inset w-full px-3 py-2 text-[11px] font-mono font-bold truncate" title={overlayImageFolder}>
-                    <ImageIcon className="w-3.5 h-3.5 inline mr-1" /> {overlayImageFolder.split(/[\\/]/).pop() || overlayImageFolder}
-                  </div>
-                ) : (
-                  <div className="border-[3px] border-dashed border-black/40 bg-white px-3 py-2 text-[11px] font-bold text-black/50">
-                    No folder picked — one random image from it stamps each render.
-                  </div>
-                )}
-                <p className="text-[10px] font-semibold text-black/50 mt-1">
-                  JPG, PNG, WEBP, BMP, GIF &bull; fits full frame.
-                </p>
-              </div>
-              <div className="space-y-1">
-                <div className="flex justify-between font-bold">
-                  <span className="nb-label">Overlay Opacity</span>
-                  <span className="font-mono border-2 border-black bg-cyan-300 px-1">
-                    {Math.round((renderOptions.overlayOpacity ?? 0.8) * 100)}%
-                  </span>
-                </div>
-                <input
-                  type="range" min="5" max="100" step="5"
-                  value={Math.round((renderOptions.overlayOpacity ?? 0.8) * 100)}
-                  onChange={e => setRenderOptions(prev => ({ ...prev, overlayOpacity: parseInt(e.target.value, 10) / 100 }))}
-                  className="nb-range w-full"
-                />
-                <p className="nb-sub">Blended over video at this opacity.</p>
-              </div>
-              <div className="space-y-1">
-                <span className="nb-label">Overlay Duration</span>
-                <select
-                  value={renderOptions.overlayTimeout ?? 'full'}
-                  onChange={e => {
-                    const val = e.target.value === 'full' ? 'full' : Number(e.target.value);
-                    setRenderOptions(prev => ({ ...prev, overlayTimeout: val }));
-                  }}
-                  className="nb-select w-full"
-                >
-                  <option value="full">Fulltime (Entire Video)</option>
-                  <option value="30">First 30 Seconds</option>
-                  <option value="60">First 1 Minute</option>
-                  <option value="120">First 2 Minutes</option>
-                  <option value="300">First 5 Minutes</option>
-                </select>
-                <p className="nb-sub">Disappears after this duration.</p>
-              </div>
-            </div>
-          )}
         </div>
 
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 flex-wrap">

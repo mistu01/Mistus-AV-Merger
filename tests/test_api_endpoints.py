@@ -3,6 +3,7 @@ from mistus_av_merger.api.app import (
     get_app_settings,
     set_app_settings,
     stop_queue_immediately,
+    clear_all_jobs,
     add_jobs,
     queue_mgr,
     SettingsUpdateRequest,
@@ -41,3 +42,9 @@ def test_queue_add_does_not_auto_start(tmp_path):
     assert len(res["added"]) == 1
     # Auto-start must NOT be triggered
     assert queue_mgr.is_running is False
+
+
+def test_queue_clear_endpoint():
+    res = clear_all_jobs()
+    assert res["status"] == "cleared"
+    assert len(queue_mgr.jobs) == 0

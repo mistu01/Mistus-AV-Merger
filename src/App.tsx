@@ -308,19 +308,31 @@ export default function App() {
     mode: 'copy' | 'encode',
     modeReason: string,
     overlayFolder?: string,
-  ) => ({
-    audio_path: audio.path,
-    video_path: video.path,
-    output_path: `${outputFolder.replace(/[\\/]+$/, '')}/${outputName}`,
-    mode,
-    mode_reason: modeReason,
-    duration: audio.duration,
-    ...(overlayFolder ? { overlay_folder: overlayFolder } : {}),
-    options: {
-      ...renderOptions,
-      ...(overlayFolder ? { overlayFolder, overlayPath: undefined } : {}),
-    },
-  });
+  ) => {
+    const hasEffects = Boolean(
+      (renderOptions.resolution && renderOptions.resolution !== 'original') ||
+      (renderOptions.vhsPreset && renderOptions.vhsPreset !== 'none' && renderOptions.vhsPreset !== 'off') ||
+      renderOptions.nightModeEnabled ||
+      renderOptions.noiseStaticEnabled ||
+      (renderOptions.overlayEnabled && (renderOptions.overlayPath || overlayFolder || renderOptions.overlayFolder))
+    );
+    const effectiveMode = hasEffects ? 'encode' : mode;
+    const effectiveReason = hasEffects ? 'Visual effects active (re-encode required)' : modeReason;
+
+    return {
+      audio_path: audio.path,
+      video_path: video.path,
+      output_path: `${outputFolder.replace(/[\\/]+$/, '')}/${outputName}`,
+      mode: effectiveMode,
+      mode_reason: effectiveReason,
+      duration: audio.duration,
+      ...(overlayFolder ? { overlay_folder: overlayFolder } : {}),
+      options: {
+        ...renderOptions,
+        ...(overlayFolder ? { overlayFolder, overlayPath: undefined } : {}),
+      },
+    };
+  };
 
   const postQueueCommand = (path: string, body?: Record<string, unknown>) => {
     fetch(`${API}/api/v1/queue/${path}`, {
@@ -419,6 +431,13 @@ export default function App() {
 
   const handleClearCompleted = () => postQueueCommand('clear-completed');
 
+  const handleClearQueue = () => {
+    if (window.confirm('Are you sure you want to clear all jobs from the queue?')) {
+      postQueueCommand('clear');
+      setJobs([]);
+    }
+  };
+
   const handlePauseJob = (id: string) =>
     postQueueCommand(`jobs/${id}/pause`);
 
@@ -471,6 +490,7 @@ export default function App() {
             onSelectOverlayImageClick={() => openBrowser('single_image', 'Pick An Overlay Image (.jpg, .png, .webp)')}
             onAddToQueue={handleAddSingleToQueue}
             onPreview5s={() => setPreviewSampleModal(true)}
+            onNavigateToRenderOptions={() => setActiveTab('effects')}
           />
         )}
 
@@ -489,6 +509,7 @@ export default function App() {
             videoFolder={videoFolder}
             outputFolder={outputFolder}
             overlayImageFolder={overlayImageFolder}
+            onNavigateToRenderOptions={() => setActiveTab('effects')}
           />
         )}
 
@@ -496,6 +517,15 @@ export default function App() {
           <VisualEffectsStudio
             renderOptions={renderOptions}
             setRenderOptions={setRenderOptions}
+            overlayImageFolder={overlayImageFolder}
+            onOpenBrowser={target => {
+              if (target === 'single_image') {
+                openBrowser('single_image', 'Pick An Overlay Image (.jpg, .png, .webp)');
+              } else {
+                openBrowser('bulk_images', 'Pick The Overlay Images Folder');
+              }
+            }}
+            onNavigateToTab={tab => setActiveTab(tab)}
           />
         )}
 
@@ -508,6 +538,7 @@ export default function App() {
             onResumeAll={handleResumeAll}
             onStopAfterCurrent={handleStopAfterCurrent}
             onClearCompleted={handleClearCompleted}
+            onClearQueue={handleClearQueue}
             onPauseJob={handlePauseJob}
             onResumeJob={handleResumeJob}
             onCancelJob={handleCancelJob}

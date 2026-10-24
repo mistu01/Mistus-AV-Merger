@@ -553,6 +553,17 @@ def add_jobs(req: QueueAddRequest):
         else:
             options.pop("overlayPath", None)
 
+        has_effects = bool(
+            (options.get("resolution") and options.get("resolution") != "original")
+            or (options.get("vhsPreset") and options.get("vhsPreset") not in ("none", "off"))
+            or options.get("nightModeEnabled")
+            or options.get("noiseStaticEnabled")
+            or (options.get("overlayEnabled") and (options.get("overlayPath") or raw.get("overlay_folder")))
+        )
+        if has_effects:
+            mode = "encode"
+            mode_reason = "Visual effects / overlay active (re-encode required)" 
+
         audio_dur = raw.get("duration")
         if not audio_dur:
             probed = _pick_probe_duration(audio_path)
@@ -911,6 +922,16 @@ def clear_completed_jobs():
     queue_mgr.jobs = [j for j in queue_mgr.jobs if j.status not in ("completed", "failed")]
     queue_mgr.save_session()
     return {"status": "cleared", "queue": [j.to_dict() for j in queue_mgr.jobs]}
+
+
+@app.post("/api/v1/queue/clear")
+@app.post("/api/v1/queue/clear-all")
+def clear_all_jobs():
+    """Immediately terminates any running job and clears the entire queue."""
+    stop_queue_immediately()
+    queue_mgr.jobs.clear()
+    queue_mgr.save_session()
+    return {"status": "cleared", "queue": []}
 
 
 class JobMoveRequest(BaseModel):

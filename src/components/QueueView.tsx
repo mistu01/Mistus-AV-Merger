@@ -47,6 +47,7 @@ interface QueueViewProps {
   onResumeAll: () => void;
   onStopAfterCurrent: () => void;
   onClearCompleted: () => void;
+  onClearQueue: () => void;
   onPauseJob: (id: string) => void;
   onResumeJob: (id: string) => void;
   onCancelJob: (id: string) => void;
@@ -70,6 +71,7 @@ export const QueueView: React.FC<QueueViewProps> = ({
   onResumeAll,
   onStopAfterCurrent,
   onClearCompleted,
+  onClearQueue,
   onPauseJob,
   onResumeJob,
   onCancelJob,
@@ -144,6 +146,11 @@ export const QueueView: React.FC<QueueViewProps> = ({
             <button onClick={onClearCompleted} disabled={completedCount === 0}
               className="nb-btn nb-btn-white nb-press disabled:opacity-40">
               Clear Completed
+            </button>
+
+            <button onClick={onClearQueue} disabled={jobs.length === 0}
+              className="nb-btn nb-btn-pink nb-press disabled:opacity-40 flex items-center gap-1.5" title="Clear entire queue">
+              <Trash2 className="w-3.5 h-3.5" /> Clear Queue
             </button>
           </div>
         </div>

@@ -11,54 +11,69 @@ import {
   Activity, 
   Image as ImageIcon, 
   Sliders, 
-  Play, 
   RotateCcw, 
-  Download, 
-  Code2 
+  Code2,
+  Zap,
+  CheckCircle2,
+  AlertTriangle,
+  X,
+  Layers,
+  ArrowRight
 } from 'lucide-react';
 import { RenderOptions } from '../utils/engine';
-import { VHS_PRESETS, VHSPreset } from '../data/presets';
+import { VHS_PRESETS } from '../data/presets';
 
 interface VisualEffectsStudioProps {
   renderOptions: RenderOptions;
   setRenderOptions: React.Dispatch<React.SetStateAction<RenderOptions>>;
+  overlayImageFolder?: string;
+  onOpenBrowser?: (target: 'single_image' | 'bulk_images') => void;
+  onNavigateToTab?: (tab: 'single' | 'bulk' | 'queue') => void;
 }
 
 export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
   renderOptions,
   setRenderOptions,
+  overlayImageFolder = '',
+  onOpenBrowser,
+  onNavigateToTab,
 }) => {
-  const [selectedPresetId, setSelectedPresetId] = useState<string>(renderOptions.vhsPreset || 'clean_vhs');
-  const [nightMode, setNightMode] = useState<boolean>(!!renderOptions.nightModeEnabled);
-  const [nightIntensity, setNightIntensity] = useState<number>(renderOptions.nightIntensity ?? 0.7);
-  const [noiseGrain, setNoiseGrain] = useState<number>(20);
-  const [staticBursts, setStaticBursts] = useState<boolean>(!!renderOptions.noiseStaticEnabled);
-  const [noiseSeed, setNoiseSeed] = useState<number>(renderOptions.noiseSeed ?? 1994);
+  // Direct options bindings
+  const vhsPreset = renderOptions.vhsPreset || 'none';
+  const nightMode = !!renderOptions.nightModeEnabled;
+  const nightIntensity = renderOptions.nightIntensity ?? 0.7;
+  const staticBursts = !!renderOptions.noiseStaticEnabled;
+  const noiseSeed = renderOptions.noiseSeed ?? 1994;
+  const overlayEnabled = !!renderOptions.overlayEnabled;
+  const overlayOpacity = renderOptions.overlayOpacity ?? 0.8;
+  const overlayTimeout = renderOptions.overlayTimeout ?? 'full';
+  const resolution = renderOptions.resolution || 'original';
+  const sizeTarget = renderOptions.sizeTarget || 'balanced';
 
-  // Overlay settings
-  const [overlayEnabled, setOverlayEnabled] = useState<boolean>(!!renderOptions.overlayEnabled);
-  const [overlayOpacity, setOverlayOpacity] = useState<number>(renderOptions.overlayOpacity ?? 0.8);
-  const [overlayBlend, setOverlayBlend] = useState<'screen' | 'overlay' | 'multiply'>('screen');
+  // Local grain slider for canvas visual feedback
+  const [noiseGrain, setNoiseGrain] = useState<number>(20);
 
   // Canvas ref for real-time visual simulation
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const animationFrameRef = useRef<number | null>(null);
 
-  const activePreset = VHS_PRESETS.find(p => p.id === selectedPresetId) || VHS_PRESETS[1];
+  const activePreset = VHS_PRESETS.find(p => p.id === vhsPreset) || VHS_PRESETS[0];
 
-  // Sync back to renderOptions
-  useEffect(() => {
-    setRenderOptions(prev => ({
-      ...prev,
-      vhsPreset: selectedPresetId,
-      nightModeEnabled: nightMode,
-      nightIntensity,
-      noiseStaticEnabled: staticBursts,
-      noiseSeed,
-      overlayEnabled,
-      overlayOpacity,
-    }));
-  }, [selectedPresetId, nightMode, nightIntensity, staticBursts, noiseSeed, overlayEnabled, overlayOpacity]);
+  const singleOverlayName = renderOptions.overlayPath
+    ? renderOptions.overlayPath.split(/[/\\]/).pop() || renderOptions.overlayPath
+    : '';
+  const bulkOverlayFolderName = overlayImageFolder
+    ? overlayImageFolder.split(/[/\\]/).pop() || overlayImageFolder
+    : '';
+
+  // Has effects flag
+  const hasEffects = Boolean(
+    (resolution && resolution !== 'original') ||
+    (vhsPreset && vhsPreset !== 'none' && vhsPreset !== 'off') ||
+    nightMode ||
+    staticBursts ||
+    (overlayEnabled && (renderOptions.overlayPath || overlayImageFolder || renderOptions.overlayFolder))
+  );
 
   // Real-time canvas simulation animation
   useEffect(() => {
@@ -201,10 +216,20 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
       if (overlayEnabled) {
         ctx.save();
         ctx.globalAlpha = overlayOpacity;
+        ctx.strokeStyle = '#fde047';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(10, 10, w - 20, h - 20);
         ctx.font = 'bold 12px monospace';
         ctx.fillStyle = '#fde047';
-        ctx.fillText('PLAY \u25BA 00:01:24:18', 20, 32);
-        ctx.fillText('SP 1994-OCT-23', 20, 50);
+        const label = singleOverlayName
+          ? `OVERLAY: ${singleOverlayName}`
+          : bulkOverlayFolderName
+          ? `OVERLAY: [${bulkOverlayFolderName}]`
+          : 'PLAY \u25BA 00:01:24:18';
+        ctx.fillText(label, 20, 32);
+        if (overlayTimeout !== 'full') {
+          ctx.fillText(`DURATION: ${overlayTimeout}s`, 20, 50);
+        }
         ctx.restore();
       }
 
@@ -218,45 +243,118 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [nightMode, nightIntensity, activePreset, noiseGrain, staticBursts, overlayEnabled, overlayOpacity]);
+  }, [nightMode, nightIntensity, activePreset, noiseGrain, staticBursts, overlayEnabled, overlayOpacity, overlayTimeout, singleOverlayName, bulkOverlayFolderName]);
+
+  const handleResetAll = () => {
+    setRenderOptions({
+      resolution: 'original',
+      sizeTarget: 'balanced',
+      vhsPreset: 'none',
+      nightModeEnabled: false,
+      nightIntensity: 0.7,
+      noiseStaticEnabled: false,
+      noiseSeed: 1994,
+      overlayEnabled: false,
+      overlayOpacity: 0.8,
+      overlayTimeout: 'full',
+      overlayPath: undefined,
+      overlayFolder: undefined,
+    });
+  };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 animate-nb-fade">
       {/* Intro Header */}
       <div className="nb-card p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <div className="nb-stripe h-2 w-24 mb-2" />
-          <h3 className="nb-title text-xl">Visual FX &amp; VHS Studio</h3>
+          <div className="nb-stripe h-2 w-28 mb-2" />
+          <h3 className="nb-title text-2xl flex items-center gap-2">
+            <Sliders className="w-6 h-6 text-black" />
+            Render Options &amp; Visual FX Studio
+          </h3>
           <p className="nb-sub font-semibold mt-1">
-            Built entirely with FFmpeg filters (noise, chromashift, gblur, curves, vignette, scanlines).
+            Centralized settings for both Single and Bulk rendering. Configure effects, scaling, quality targets, and image overlays.
           </p>
         </div>
 
         <button
-          onClick={() => {
-            setSelectedPresetId('none');
-            setNightMode(false);
-            setStaticBursts(false);
-            setOverlayEnabled(false);
-          }}
-          className="nb-btn nb-btn-pink nb-press"
+          onClick={handleResetAll}
+          className="nb-btn nb-btn-pink nb-press shrink-0"
+          title="Reset all effects and options to standard stream copy defaults"
         >
-          <RotateCcw className="w-3.5 h-3.5" /> Reset All
+          <RotateCcw className="w-3.5 h-3.5" /> Reset All to Defaults
         </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Left: Live Canvas Monitor */}
-        <div className="lg:col-span-6 space-y-4">
-          <div className="nb-card p-4">
-            <div className="flex items-center justify-between mb-3">
-              <span className="nb-label flex items-center gap-1.5">
-                <Tv className="w-4 h-4" /> Simulated Output
+      {/* Mode Status Banner: Warn if no effects or confirm active effects */}
+      {hasEffects ? (
+        <div className="border-[3px] border-black bg-lime-200 p-5 shadow-[4px_4px_0_#000] space-y-3">
+          <div className="flex items-center gap-3">
+            <Sparkles className="w-6 h-6 text-black shrink-0" />
+            <div>
+              <h4 className="text-sm font-black uppercase tracking-wider text-black">
+                ✨ Visual Effects Active &mdash; Re-Encode Mode Required
+              </h4>
+              <p className="text-xs font-bold text-black/80 mt-0.5">
+                Renders will re-encode using your CPU profile with hardware/software acceleration to apply the filters below.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 pt-1 border-t-[2px] border-black/20 text-[11px] font-mono font-bold">
+            {resolution !== 'original' && (
+              <span className="nb-badge nb-badge-yellow">Scale: {resolution}</span>
+            )}
+            {sizeTarget !== 'balanced' && (
+              <span className="nb-badge">Target: {sizeTarget}</span>
+            )}
+            {vhsPreset && vhsPreset !== 'none' && vhsPreset !== 'off' && (
+              <span className="nb-badge nb-badge-cyan">VHS: {activePreset.name}</span>
+            )}
+            {nightMode && (
+              <span className="nb-badge nb-badge-lime">Night FX ({Math.round(nightIntensity * 100)}%)</span>
+            )}
+            {staticBursts && (
+              <span className="nb-badge">Noise &amp; Static</span>
+            )}
+            {overlayEnabled && (
+              <span className="nb-badge nb-badge-pink">
+                Overlay ({singleOverlayName ? 'Single Image' : bulkOverlayFolderName ? 'Bulk Folder' : 'Active'}, {Math.round(overlayOpacity * 100)}%, {overlayTimeout === 'full' ? 'Fulltime' : `${overlayTimeout}s`})
               </span>
-              <span className="nb-badge nb-badge-lime">Canvas 60fps</span>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="border-[3px] border-black bg-amber-200 p-5 shadow-[4px_4px_0_#000] space-y-2">
+          <div className="flex items-start sm:items-center gap-3">
+            <Zap className="w-6 h-6 text-black shrink-0" />
+            <div className="flex-1">
+              <h4 className="text-sm font-black uppercase tracking-wider text-black">
+                ⚡ Fast Stream Copy Mode (Lossless, Instant ~300-700x)
+              </h4>
+              <p className="text-xs font-semibold text-black/80 mt-0.5">
+                No visual effects, resolution scaling, or image overlays are active. Video packets will remux directly without re-encoding, preserving 100% original quality and finishing in seconds.
+              </p>
+              <p className="text-[11px] font-bold text-black/70 mt-1">
+                👉 To apply VHS tape looks, night mode, film grain, or image overlays, enable any option below.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main Grid: Left Monitor + Right Controls */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        {/* Left Column: Live Canvas Monitor & Filtergraph Preview */}
+        <div className="lg:col-span-5 space-y-6">
+          <div className="nb-card p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="nb-label flex items-center gap-1.5">
+                <Tv className="w-4 h-4" /> Realtime Filter Simulation
+              </span>
+              <span className="nb-badge nb-badge-lime font-mono text-[10px]">60 FPS</span>
             </div>
 
-            <div className="border-[3px] border-black bg-black flex items-center justify-center overflow-hidden">
+            <div className="border-[3px] border-black bg-black flex items-center justify-center overflow-hidden aspect-video">
               <canvas
                 ref={canvasRef}
                 width={560}
@@ -265,94 +363,315 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
               />
             </div>
 
-            <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] font-mono font-bold">
+            <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono font-bold">
               <span className="nb-badge nb-badge-yellow">Preset: {activePreset.name}</span>
               <span className={`nb-badge ${nightMode ? 'nb-badge-cyan' : ''}`}>Night: {nightMode ? 'ON' : 'OFF'}</span>
+              <span className="nb-badge">Res: {resolution}</span>
               <span className="nb-badge">Seed: #{noiseSeed}</span>
             </div>
           </div>
 
-          {/* Filtergraph Inspector */}
+          {/* Compiled Filtergraph Inspector */}
           <div className="nb-card p-5 space-y-2">
             <div className="nb-label flex items-center gap-2">
               <Code2 className="w-4 h-4" /> Compiled FFmpeg -vf Filtergraph
             </div>
             <div className="bg-[#111] text-yellow-300 border-[3px] border-black p-3 font-mono text-[11px] break-all select-all">
-              {activePreset.filtergraph || 'No filter (stream copy candidate)'}
-              {nightMode && ',eq=contrast=1.1:brightness=-0.08,curves=all=\'0/0 0.5/0.4 1/0.95\':blue=\'0/0 0.5/0.58 1/1\',vignette=PI/4'}
-              {staticBursts && `,noise=alls=15:allf=t+u:all_seed=${noiseSeed}`}
+              {resolution !== 'original' && `scale=${resolution === '1080p' ? '1920:1080' : resolution === '720p' ? '1280:720' : '854:480'}:force_original_aspect_ratio=decrease,pad=${resolution === '1080p' ? '1920:1080' : resolution === '720p' ? '1280:720' : '854:480'}:(ow-iw)/2:(oh-ih)/2,`}
+              {activePreset.filtergraph || (!hasEffects ? 'No filter — stream copy enabled (-c:v copy)' : '')}
+              {nightMode && `${activePreset.filtergraph ? ',' : ''}eq=contrast=1.1:brightness=-0.08,curves=all='0/0 0.5/0.4 1/0.95':blue='0/0 0.5/0.58 1/1',vignette=PI/4`}
+              {staticBursts && `${(activePreset.filtergraph || nightMode) ? ',' : ''}noise=alls=15:allf=t+u:all_seed=${noiseSeed}`}
+              {overlayEnabled && `${(activePreset.filtergraph || nightMode || staticBursts) ? ',' : ''}[1:v]scale=iw:ih[ov];[0:v][ov]overlay=0:0${overlayTimeout !== 'full' ? `:enable='lte(t,${overlayTimeout})'` : ''}`}
             </div>
           </div>
+
+          {/* Navigation Shortcuts */}
+          {onNavigateToTab && (
+            <div className="nb-card p-4 space-y-2">
+              <span className="nb-label">Ready to render?</span>
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <button
+                  onClick={() => onNavigateToTab('single')}
+                  className="nb-btn nb-btn-white nb-press text-xs justify-center"
+                >
+                  Single Render <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                </button>
+                <button
+                  onClick={() => onNavigateToTab('bulk')}
+                  className="nb-btn nb-btn-yellow nb-press text-xs justify-center"
+                >
+                  Bulk Scan &amp; Render <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Right: Controls */}
-        <div className="lg:col-span-6 space-y-6">
-          {/* Presets */}
+        {/* Right Column: All Settings Controls */}
+        <div className="lg:col-span-7 space-y-6">
+          {/* 1. Resolution & Output Size Target */}
           <div className="nb-card p-6 space-y-4">
             <h4 className="nb-title text-sm flex items-center gap-2">
-              <Tv className="w-4 h-4" /> VHS Style Presets
+              <Sliders className="w-4 h-4" /> Output Resolution &amp; Bitrate Target
             </h4>
 
-            <div className="grid grid-cols-2 gap-2">
-              {VHS_PRESETS.map(preset => (
-                <button
-                  key={preset.id}
-                  onClick={() => setSelectedPresetId(preset.id)}
-                  className={`border-[3px] border-black p-3 text-left nb-press ${
-                    selectedPresetId === preset.id ? 'bg-yellow-300' : 'bg-white hover:bg-lime-100'
-                  }`}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="nb-label">Resolution Scaling</label>
+                <select
+                  value={resolution}
+                  onChange={e => setRenderOptions(prev => ({ ...prev, resolution: e.target.value as any }))}
+                  className="nb-select w-full"
                 >
-                  <div className="text-xs font-black">{preset.name}</div>
-                  <div className="text-[10px] font-semibold text-black/60 mt-1 line-clamp-2">{preset.description}</div>
-                </button>
-              ))}
+                  <option value="original">Original (allows fast stream copy)</option>
+                  <option value="1080p">1080p Full HD (1920x1080)</option>
+                  <option value="720p">720p HD (1280x720)</option>
+                  <option value="480p">480p SD (854x480)</option>
+                </select>
+                <p className="nb-sub">
+                  {resolution === 'original'
+                    ? 'Native resolution preserved; enables instant fast stream copy.'
+                    : 'Letterboxes and scales with Lanczos (requires re-encode).'}
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="nb-label">Output File Size Target</label>
+                <select
+                  value={sizeTarget}
+                  onChange={e => setRenderOptions(prev => ({ ...prev, sizeTarget: e.target.value as any }))}
+                  className="nb-select w-full"
+                >
+                  <option value="small">Small ~250 MB/hr</option>
+                  <option value="balanced">Balanced ~325 MB/hr</option>
+                  <option value="high">High ~400 MB/hr</option>
+                  <option value="unlimited">Max Quality (CRF 21, no size cap)</option>
+                </select>
+                <p className="nb-sub">
+                  {sizeTarget === 'unlimited'
+                    ? 'Highest visual quality with variable bitrate (when re-encoding).'
+                    : 'Caps file size per hour of audio when re-encoding.'}
+                </p>
+              </div>
             </div>
           </div>
 
-          {/* Night Mode */}
+          {/* 2. Image Overlay Section (Universal for Single and Bulk) */}
           <div className="nb-card p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h4 className="nb-title text-sm flex items-center gap-2">
-                <Moon className="w-4 h-4" /> Night Mode
+                <ImageIcon className="w-4 h-4" /> Image Overlay (Full Frame Fit)
+              </h4>
+              <input
+                type="checkbox"
+                className="nb-check"
+                checked={overlayEnabled}
+                onChange={e => setRenderOptions(prev => ({ ...prev, overlayEnabled: e.target.checked }))}
+                aria-label="Enable Image Overlay"
+              />
+            </div>
+
+            <p className="nb-sub">
+              Stamps artwork or watermarks over video. Automatically scaled and centered to cover the frame regardless of image resolution.
+            </p>
+
+            {overlayEnabled && (
+              <div className="pt-3 border-t-[2px] border-black/10 space-y-4 animate-nb-pop">
+                {/* Image source selectors for Single & Bulk modes */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Single Mode Overlay Source */}
+                  <div className="space-y-2">
+                    <span className="nb-label flex items-center justify-between">
+                      <span>Single Mode Image</span>
+                      {renderOptions.overlayPath && (
+                        <button
+                          onClick={() => setRenderOptions(prev => ({ ...prev, overlayPath: undefined }))}
+                          className="text-[10px] text-red-600 hover:underline flex items-center gap-0.5"
+                        >
+                          <X className="w-3 h-3" /> Clear
+                        </button>
+                      )}
+                    </span>
+                    <div className="flex gap-2">
+                      <div className="nb-inset flex-1 px-3 py-2 text-[11px] font-mono font-bold truncate bg-white" title={renderOptions.overlayPath || 'No image picked'}>
+                        {singleOverlayName || 'No image picked'}
+                      </div>
+                      {onOpenBrowser && (
+                        <button
+                          onClick={() => onOpenBrowser('single_image')}
+                          className="nb-btn nb-btn-sm nb-btn-cyan nb-press shrink-0"
+                        >
+                          Pick File
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[10px] font-semibold text-black/50">Used when rendering from Single mode.</p>
+                  </div>
+
+                  {/* Bulk Mode Overlay Folder Source */}
+                  <div className="space-y-2">
+                    <span className="nb-label flex items-center justify-between">
+                      <span>Bulk Mode Folder</span>
+                      {overlayImageFolder && (
+                        <button
+                          onClick={() => setRenderOptions(prev => ({ ...prev, overlayFolder: undefined }))}
+                          className="text-[10px] text-red-600 hover:underline flex items-center gap-0.5"
+                        >
+                          <X className="w-3 h-3" /> Clear
+                        </button>
+                      )}
+                    </span>
+                    <div className="flex gap-2">
+                      <div className="nb-inset flex-1 px-3 py-2 text-[11px] font-mono font-bold truncate bg-white" title={overlayImageFolder || 'No folder picked'}>
+                        {bulkOverlayFolderName || 'No folder picked'}
+                      </div>
+                      {onOpenBrowser && (
+                        <button
+                          onClick={() => onOpenBrowser('bulk_images')}
+                          className="nb-btn nb-btn-sm nb-btn-cyan nb-press shrink-0"
+                        >
+                          Pick Folder
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[10px] font-semibold text-black/50">Stamps one random image per render in bulk mode.</p>
+                  </div>
+                </div>
+
+                {/* Opacity & Duration / Timeout */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t-[2px] border-black/10">
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-xs font-bold">
+                      <span className="nb-label">Overlay Opacity</span>
+                      <span className="font-mono border-2 border-black bg-pink-300 px-1">
+                        {Math.round(overlayOpacity * 100)}%
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="5"
+                      max="100"
+                      step="5"
+                      value={Math.round(overlayOpacity * 100)}
+                      onChange={e => setRenderOptions(prev => ({ ...prev, overlayOpacity: parseInt(e.target.value, 10) / 100 }))}
+                      className="nb-range w-full"
+                    />
+                    <p className="nb-sub">Blend transparency level.</p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <span className="nb-label">Overlay Duration / Timeout</span>
+                    <select
+                      value={overlayTimeout}
+                      onChange={e => {
+                        const val = e.target.value === 'full' ? 'full' : Number(e.target.value);
+                        setRenderOptions(prev => ({ ...prev, overlayTimeout: val }));
+                      }}
+                      className="nb-select w-full"
+                    >
+                      <option value="full">Fulltime (Entire Video)</option>
+                      <option value="30">First 30 Seconds</option>
+                      <option value="60">First 1 Minute</option>
+                      <option value="120">First 2 Minutes</option>
+                      <option value="300">First 5 Minutes</option>
+                    </select>
+                    <p className="nb-sub">Overlay fades/disappears after selected time.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 3. VHS Style Presets */}
+          <div className="nb-card p-6 space-y-4">
+            <h4 className="nb-title text-sm flex items-center gap-2">
+              <Tv className="w-4 h-4" /> VHS Tape Presets
+            </h4>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {VHS_PRESETS.map(preset => {
+                const isSelected = vhsPreset === preset.id;
+                return (
+                  <button
+                    key={preset.id}
+                    onClick={() => setRenderOptions(prev => ({ ...prev, vhsPreset: preset.id }))}
+                    className={`border-[3px] border-black p-3 text-left nb-press transition-colors ${
+                      isSelected ? 'bg-yellow-300' : 'bg-white hover:bg-lime-100'
+                    }`}
+                  >
+                    <div className="text-xs font-black">{preset.name}</div>
+                    <div className="text-[10px] font-semibold text-black/60 mt-1 line-clamp-2">
+                      {preset.description}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 4. Atmospheric Night Mode */}
+          <div className="nb-card p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h4 className="nb-title text-sm flex items-center gap-2">
+                <Moon className="w-4 h-4" /> Night Mode Color Grading &amp; Vignette
               </h4>
               <input
                 type="checkbox"
                 className="nb-check"
                 checked={nightMode}
-                onChange={e => setNightMode(e.target.checked)}
+                onChange={e => setRenderOptions(prev => ({ ...prev, nightModeEnabled: e.target.checked }))}
                 aria-label="Night mode"
               />
             </div>
 
             {nightMode && (
-              <div className="space-y-1.5 pt-2">
+              <div className="space-y-1.5 pt-2 animate-nb-pop">
                 <div className="flex justify-between text-xs font-bold">
-                  <span>Intensity</span>
-                  <span className="font-mono border-2 border-black bg-cyan-300 px-1">{Math.round(nightIntensity * 100)}%</span>
+                  <span>Color Wash &amp; Vignette Intensity</span>
+                  <span className="font-mono border-2 border-black bg-cyan-300 px-1">
+                    {Math.round(nightIntensity * 100)}%
+                  </span>
                 </div>
                 <input
-                  type="range" min="0.1" max="1.0" step="0.05" value={nightIntensity}
-                  onChange={e => setNightIntensity(parseFloat(e.target.value))}
+                  type="range"
+                  min="0.1"
+                  max="1.0"
+                  step="0.05"
+                  value={nightIntensity}
+                  onChange={e => setRenderOptions(prev => ({ ...prev, nightIntensity: parseFloat(e.target.value) }))}
                   className="nb-range w-full"
                 />
+                <p className="nb-sub">Applies cinematic cool midnight grade and dark radial edge vignette.</p>
               </div>
             )}
           </div>
 
-          {/* Noise & Static */}
+          {/* 5. Noise & Static Synthesis */}
           <div className="nb-card p-6 space-y-4">
-            <h4 className="nb-title text-sm flex items-center gap-2">
-              <Activity className="w-4 h-4" /> Noise &amp; Static
-            </h4>
+            <div className="flex items-center justify-between">
+              <h4 className="nb-title text-sm flex items-center gap-2">
+                <Activity className="w-4 h-4" /> Film Grain &amp; Static Snow Bursts
+              </h4>
+              <input
+                type="checkbox"
+                className="nb-check"
+                checked={staticBursts}
+                onChange={e => setRenderOptions(prev => ({ ...prev, noiseStaticEnabled: e.target.checked }))}
+                aria-label="Static snow bursts"
+              />
+            </div>
 
             <div className="space-y-3">
               <div className="space-y-1.5">
                 <div className="flex justify-between text-xs font-bold">
-                  <span>Film Grain</span>
+                  <span>Simulation Film Grain</span>
                   <span className="font-mono border-2 border-black bg-yellow-300 px-1">{noiseGrain}%</span>
                 </div>
                 <input
-                  type="range" min="0" max="60" value={noiseGrain}
+                  type="range"
+                  min="0"
+                  max="60"
+                  value={noiseGrain}
                   onChange={e => setNoiseGrain(parseInt(e.target.value, 10))}
                   className="nb-range w-full"
                 />
@@ -360,50 +679,26 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
 
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2">
                 <label className="flex items-center gap-2 cursor-pointer text-xs font-bold">
-                  <input type="checkbox" className="nb-check" checked={staticBursts}
-                    onChange={e => setStaticBursts(e.target.checked)} />
-                  <span>Static snow bursts</span>
+                  <input
+                    type="checkbox"
+                    className="nb-check"
+                    checked={staticBursts}
+                    onChange={e => setRenderOptions(prev => ({ ...prev, noiseStaticEnabled: e.target.checked }))}
+                  />
+                  <span>FFmpeg static snow synthesis (-vf noise)</span>
                 </label>
 
                 <div className="flex items-center gap-2">
-                  <span className="nb-label">Seed</span>
+                  <span className="nb-label">Noise Seed</span>
                   <input
-                    type="number" value={noiseSeed}
-                    onChange={e => setNoiseSeed(parseInt(e.target.value, 10) || 0)}
-                    className="nb-input w-20 font-mono"
+                    type="number"
+                    value={noiseSeed}
+                    onChange={e => setRenderOptions(prev => ({ ...prev, noiseSeed: parseInt(e.target.value, 10) || 0 }))}
+                    className="nb-input w-24 font-mono text-xs"
                   />
                 </div>
               </div>
             </div>
-          </div>
-
-          {/* OSD Overlay */}
-          <div className="nb-card p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h4 className="nb-title text-sm flex items-center gap-2">
-                <ImageIcon className="w-4 h-4" /> VCR On-Screen Display
-              </h4>
-              <input
-                type="checkbox" className="nb-check" checked={overlayEnabled}
-                onChange={e => setOverlayEnabled(e.target.checked)}
-                aria-label="Overlay"
-              />
-            </div>
-
-            {overlayEnabled && (
-              <div className="space-y-1.5 pt-2">
-                <div className="flex justify-between text-xs font-bold">
-                  <span>Opacity</span>
-                  <span className="font-mono border-2 border-black bg-pink-300 px-1">{Math.round(overlayOpacity * 100)}%</span>
-                </div>
-                <input
-                  type="range" min="0.1" max="1.0" step="0.05" value={overlayOpacity}
-                  onChange={e => setOverlayOpacity(parseFloat(e.target.value))}
-                  className="nb-range w-full"
-                />
-                <p className="nb-sub font-semibold">Simulates a 1990s VCR timestamp overlay.</p>
-              </div>
-            )}
           </div>
         </div>
       </div>
