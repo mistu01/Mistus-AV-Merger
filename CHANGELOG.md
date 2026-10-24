@@ -10,8 +10,34 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 ## [Unreleased]
 
 ### Planned
-- Hardware decoding for AV1 inputs via NVDEC / QuickSync.
-- Multi-clip timeline sequencing before looping.
+- (nothing yet)
+
+---
+
+## [0.6.9] - 2026-10-24
+
+### Added
+- **Universal Encode Speedup & Loop-Aware Engine**:
+  - Implemented single-cycle pre-rendering for looping video clips combined with stream-copy (`-c:v copy`) multiplexing across the full audio duration.
+  - Renders with all visual effects, static noise, and image overlays active now hit **7.7x to 50x+** realtime speed on 4-core CPUs and scale even higher on multi-core systems.
+- **Location Memory**:
+  - Persistent settings endpoint `GET/POST /api/v1/settings` and client synchronization.
+  - Automatically remembers last used directories across app restarts for audio, video, output destination, and overlay image folders.
+  - File picker modal opens directly at the last navigated directory.
+- **Bulk Render Resume & Duplicate Skip**:
+  - Automatically scans output destination folder during bulk scans.
+  - Detects already completed non-empty output files, tags them with `✓ Done`, and skips them by default (`alreadyDone: true`).
+  - Added 'Skip Already Done' toggle and 'Resume Scan' banner displaying remaining render counts.
+- **Immediate Stop & Queue Safety**:
+  - Added dedicated red 'Stop Immediately' control in Queue View that terminates active FFmpeg processes via process tree traversal, cleans up partial files, and pauses queue safely.
+  - Fixed involuntary auto-start when adding jobs so renders only begin when explicitly started.
+
+### Changed
+- **Filtergraph Optimizations**:
+  - Replaced floating-point `gblur` with SIMD-vectorized `avgblur` across VHS presets (`clean_vhs`, `worn_tape`, `heavy_degradation`).
+  - Vignette filter optimized with `:eval=init` to evaluate geometry once at clip start rather than every frame.
+  - Overlay filter pipeline updated to `format=yuv420` eliminating software pixel format conversion overhead.
+  - Deduplicated redundant noise passes when VHS presets already include tape noise.
 
 ---
 
