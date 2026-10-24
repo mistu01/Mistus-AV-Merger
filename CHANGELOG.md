@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ## [Unreleased]
 
+### Planned
+- (nothing yet)
+
+---
+
+## [0.6.10] - 2026-10-24
+
 ### Added
 - **Image Overlay Timeout Options**: Choose display duration for image overlays (`First 30 Seconds`, `First 1 Minute`, `First 2 Minutes`, `First 5 Minutes`, or `Fulltime`). Timed overlays automatically disappear after the specified duration, returning to the video.
 
