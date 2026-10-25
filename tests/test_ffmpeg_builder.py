@@ -282,7 +282,7 @@ def test_build_reencode_render_bouncing_vcd_logo(tmp_path):
     )
     idx_fc = cmd.index("-filter_complex")
     graph = cmd[idx_fc + 1]
-    assert "scale2ref=w='rw*0.22':h='-1'" in graph
+    assert "scale2ref=w='rw*0.40':h='-1'" in graph
     assert "overlay=x='(W-w)-abs(mod(0.15*W*t" in graph
     assert ":enable='lte(t,60.00)'" in graph
 

@@ -219,9 +219,9 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
         ctx.globalAlpha = overlayOpacity;
 
         if (overlayAnimation === 'bounce') {
-          // Bouncing VCD / DVD screensaver diagonal motion
-          const logoW = Math.max(100, Math.floor(w * 0.22));
-          const logoH = Math.max(50, Math.floor(h * 0.20));
+          // Bouncing VCD / DVD screensaver diagonal motion (40% width)
+          const logoW = Math.max(140, Math.floor(w * 0.40));
+          const logoH = Math.max(70, Math.floor(h * 0.35));
           const boundX = w - logoW;
           const boundY = h - logoH;
           const posX = boundX > 0 ? (boundX - Math.abs(((frame * 2.8) % (2 * boundX)) - boundX)) : 0;
@@ -422,7 +422,7 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
               {nightMode && `${activePreset.filtergraph ? ',' : ''}eq=contrast=1.1:brightness=-0.08,curves=all='0/0 0.5/0.4 1/0.95':blue='0/0 0.5/0.58 1/1',vignette=PI/4`}
               {staticBursts && `${(activePreset.filtergraph || nightMode) ? ',' : ''}noise=alls=15:allf=t+u:all_seed=${noiseSeed}`}
               {overlayEnabled && (overlayAnimation === 'bounce'
-                ? `${(activePreset.filtergraph || nightMode || staticBursts) ? ',' : ''}[1:v]scale=rw*0.22:-1[ov];[0:v][ov]overlay=x='(W-w)-abs(mod(0.15*W*t,2*(W-w))-(W-w))':y='(H-h)-abs(mod(0.11*H*t,2*(H-h))-(H-h))'${overlayTimeout !== 'full' ? `:enable='lte(t,${overlayTimeout})'` : ''}`
+                ? `${(activePreset.filtergraph || nightMode || staticBursts) ? ',' : ''}[1:v]scale=rw*0.40:-1[ov];[0:v][ov]overlay=x='(W-w)-abs(mod(0.15*W*t,2*(W-w))-(W-w))':y='(H-h)-abs(mod(0.11*H*t,2*(H-h))-(H-h))'${overlayTimeout !== 'full' ? `:enable='lte(t,${overlayTimeout})'` : ''}`
                 : `${(activePreset.filtergraph || nightMode || staticBursts) ? ',' : ''}[1:v]scale=iw:ih[ov];[0:v][ov]overlay=0:0${overlayTimeout !== 'full' ? `:enable='lte(t,${overlayTimeout})'` : ''}`)}
             </div>
           </div>

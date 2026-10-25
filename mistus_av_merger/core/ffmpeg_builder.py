@@ -189,7 +189,7 @@ class FFmpegCommandBuilder:
             if str(overlay_animation).lower() in ("bounce", "vcd", "animated"):
                 vf_string = (
                     f"[0:v]{vf_string}[base];"
-                    f"[2:v][base]scale2ref=w='rw*0.22':h='-1':force_original_aspect_ratio=decrease[ovrl][refw];"
+                    f"[2:v][base]scale2ref=w='rw*0.40':h='-1':force_original_aspect_ratio=decrease[ovrl][refw];"
                     f"[ovrl]format=rgba,colorchannelmixer=aa={overlay_opacity:.2f}[ovrlA];"
                     f"[refw][ovrlA]overlay=x='(W-w)-abs(mod(0.15*W*t\\,2*(W-w))-(W-w))':y='(H-h)-abs(mod(0.11*H*t\\,2*(H-h))-(H-h))'{enable_clause}[v_out]"
                 )
@@ -316,7 +316,7 @@ class FFmpegCommandBuilder:
             if str(overlay_animation).lower() in ("bounce", "vcd", "animated"):
                 vf_string = (
                     f"[0:v]{vf_string}[base];"
-                    f"[1:v][base]scale2ref=w='rw*0.22':h='-1':force_original_aspect_ratio=decrease[ovrl][refw];"
+                    f"[1:v][base]scale2ref=w='rw*0.40':h='-1':force_original_aspect_ratio=decrease[ovrl][refw];"
                     f"[ovrl]format=rgba,colorchannelmixer=aa={overlay_opacity:.2f}[ovrlA];"
                     f"[refw][ovrlA]overlay=x='(W-w)-abs(mod(0.15*W*t\\,2*(W-w))-(W-w))':y='(H-h)-abs(mod(0.11*H*t\\,2*(H-h))-(H-h))'[v_out]"
                 )
