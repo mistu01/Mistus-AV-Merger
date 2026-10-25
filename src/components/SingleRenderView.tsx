@@ -152,7 +152,9 @@ export const SingleRenderView: React.FC<SingleRenderViewProps> = ({
                 <span className="nb-badge">Noise &amp; Static</span>
               )}
               {renderOptions.overlayEnabled && (
-                <span className="nb-badge nb-badge-pink">Image Overlay</span>
+                <span className="nb-badge nb-badge-pink">
+                  Overlay ({renderOptions.overlayAnimation === 'bounce' ? 'Bouncing Logo' : 'Full Frame'})
+                </span>
               )}
             </div>
           </div>

@@ -46,6 +46,7 @@ export interface RenderOptions {
   overlayFolder?: string;
   overlayOpacity?: number;
   overlayTimeout?: number | 'full';
+  overlayAnimation?: 'static' | 'bounce';
   encoderChoice?: string;
   crf?: number;
   sizeTarget?: 'small' | 'balanced' | 'high' | 'unlimited';
@@ -319,11 +320,12 @@ export function computeCopyVsEncode(
   }
 
   if (options.overlayEnabled && (options.overlayPath || options.overlayFolder)) {
+    const animType = options.overlayAnimation === 'bounce' ? 'bouncing VCD logo' : 'full-frame';
     return {
       mode: 'encode',
       reason: options.overlayPath
-        ? 'Re-encode required: Graphic overlay composition active.'
-        : 'Re-encode required: Graphic overlay folder active (a random image is stamped per render).'
+        ? `Re-encode required: Graphic overlay composition active (${animType}).`
+        : `Re-encode required: Graphic overlay folder active (${animType}, random image stamped per render).`
     };
   }
 

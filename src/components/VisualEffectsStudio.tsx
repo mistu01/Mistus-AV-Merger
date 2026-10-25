@@ -47,6 +47,7 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
   const overlayEnabled = !!renderOptions.overlayEnabled;
   const overlayOpacity = renderOptions.overlayOpacity ?? 0.8;
   const overlayTimeout = renderOptions.overlayTimeout ?? 'full';
+  const overlayAnimation = renderOptions.overlayAnimation || 'static';
   const resolution = renderOptions.resolution || 'original';
   const sizeTarget = renderOptions.sizeTarget || 'balanced';
 
@@ -212,23 +213,61 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
         ctx.fillRect(0, 0, w, h);
       }
 
-      // 7. Graphic Overlay (Watermark / OSD)
+      // 7. Graphic Overlay (Watermark / OSD / Bouncing VCD Logo)
       if (overlayEnabled) {
         ctx.save();
         ctx.globalAlpha = overlayOpacity;
-        ctx.strokeStyle = '#fde047';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(10, 10, w - 20, h - 20);
-        ctx.font = 'bold 12px monospace';
-        ctx.fillStyle = '#fde047';
-        const label = singleOverlayName
-          ? `OVERLAY: ${singleOverlayName}`
-          : bulkOverlayFolderName
-          ? `OVERLAY: [${bulkOverlayFolderName}]`
-          : 'PLAY \u25BA 00:01:24:18';
-        ctx.fillText(label, 20, 32);
-        if (overlayTimeout !== 'full') {
-          ctx.fillText(`DURATION: ${overlayTimeout}s`, 20, 50);
+
+        if (overlayAnimation === 'bounce') {
+          // Bouncing VCD / DVD screensaver diagonal motion
+          const logoW = Math.max(100, Math.floor(w * 0.22));
+          const logoH = Math.max(50, Math.floor(h * 0.20));
+          const boundX = w - logoW;
+          const boundY = h - logoH;
+          const posX = boundX > 0 ? (boundX - Math.abs(((frame * 2.8) % (2 * boundX)) - boundX)) : 0;
+          const posY = boundY > 0 ? (boundY - Math.abs(((frame * 2.1) % (2 * boundY)) - boundY)) : 0;
+
+          // Draw retro bouncing VCD badge
+          ctx.fillStyle = '#0f172a';
+          ctx.strokeStyle = '#38bdf8';
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          if (typeof ctx.roundRect === 'function') {
+            ctx.roundRect(posX, posY, logoW, logoH, 6);
+          } else {
+            ctx.rect(posX, posY, logoW, logoH);
+          }
+          ctx.fill();
+          ctx.stroke();
+
+          // Logo badge text
+          ctx.font = 'bold 11px monospace';
+          ctx.fillStyle = '#fde047';
+          const text = singleOverlayName
+            ? (singleOverlayName.length > 11 ? singleOverlayName.slice(0, 10) + '…' : singleOverlayName)
+            : bulkOverlayFolderName
+            ? `[${bulkOverlayFolderName.slice(0, 8)}]`
+            : 'VCD VIDEO';
+          ctx.fillText(text, posX + 8, posY + 20);
+          ctx.font = 'bold 9px sans-serif';
+          ctx.fillStyle = '#38bdf8';
+          ctx.fillText('BOUNCING LOGO', posX + 8, posY + 36);
+        } else {
+          // Static full-frame border and watermark
+          ctx.strokeStyle = '#fde047';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(10, 10, w - 20, h - 20);
+          ctx.font = 'bold 12px monospace';
+          ctx.fillStyle = '#fde047';
+          const label = singleOverlayName
+            ? `OVERLAY: ${singleOverlayName}`
+            : bulkOverlayFolderName
+            ? `OVERLAY: [${bulkOverlayFolderName}]`
+            : 'PLAY \u25BA 00:01:24:18';
+          ctx.fillText(label, 20, 32);
+          if (overlayTimeout !== 'full') {
+            ctx.fillText(`DURATION: ${overlayTimeout}s`, 20, 50);
+          }
         }
         ctx.restore();
       }
@@ -243,7 +282,7 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [nightMode, nightIntensity, activePreset, noiseGrain, staticBursts, overlayEnabled, overlayOpacity, overlayTimeout, singleOverlayName, bulkOverlayFolderName]);
+  }, [nightMode, nightIntensity, activePreset, noiseGrain, staticBursts, overlayEnabled, overlayOpacity, overlayTimeout, overlayAnimation, singleOverlayName, bulkOverlayFolderName]);
 
   const handleResetAll = () => {
     setRenderOptions({
@@ -257,6 +296,7 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
       overlayEnabled: false,
       overlayOpacity: 0.8,
       overlayTimeout: 'full',
+      overlayAnimation: 'static',
       overlayPath: undefined,
       overlayFolder: undefined,
     });
@@ -318,7 +358,7 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
             )}
             {overlayEnabled && (
               <span className="nb-badge nb-badge-pink">
-                Overlay ({singleOverlayName ? 'Single Image' : bulkOverlayFolderName ? 'Bulk Folder' : 'Active'}, {Math.round(overlayOpacity * 100)}%, {overlayTimeout === 'full' ? 'Fulltime' : `${overlayTimeout}s`})
+                Overlay ({overlayAnimation === 'bounce' ? 'Bouncing Logo' : 'Full Frame'}, {singleOverlayName ? 'Single' : bulkOverlayFolderName ? 'Bulk' : 'Active'}, {Math.round(overlayOpacity * 100)}%, {overlayTimeout === 'full' ? 'Fulltime' : `${overlayTimeout}s`})
               </span>
             )}
           </div>
@@ -381,7 +421,9 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
               {activePreset.filtergraph || (!hasEffects ? 'No filter — stream copy enabled (-c:v copy)' : '')}
               {nightMode && `${activePreset.filtergraph ? ',' : ''}eq=contrast=1.1:brightness=-0.08,curves=all='0/0 0.5/0.4 1/0.95':blue='0/0 0.5/0.58 1/1',vignette=PI/4`}
               {staticBursts && `${(activePreset.filtergraph || nightMode) ? ',' : ''}noise=alls=15:allf=t+u:all_seed=${noiseSeed}`}
-              {overlayEnabled && `${(activePreset.filtergraph || nightMode || staticBursts) ? ',' : ''}[1:v]scale=iw:ih[ov];[0:v][ov]overlay=0:0${overlayTimeout !== 'full' ? `:enable='lte(t,${overlayTimeout})'` : ''}`}
+              {overlayEnabled && (overlayAnimation === 'bounce'
+                ? `${(activePreset.filtergraph || nightMode || staticBursts) ? ',' : ''}[1:v]scale=rw*0.22:-1[ov];[0:v][ov]overlay=x='(W-w)-abs(mod(0.15*W*t,2*(W-w))-(W-w))':y='(H-h)-abs(mod(0.11*H*t,2*(H-h))-(H-h))'${overlayTimeout !== 'full' ? `:enable='lte(t,${overlayTimeout})'` : ''}`
+                : `${(activePreset.filtergraph || nightMode || staticBursts) ? ',' : ''}[1:v]scale=iw:ih[ov];[0:v][ov]overlay=0:0${overlayTimeout !== 'full' ? `:enable='lte(t,${overlayTimeout})'` : ''}`)}
             </div>
           </div>
 
@@ -576,6 +618,38 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
                       <option value="300">First 5 Minutes</option>
                     </select>
                     <p className="nb-sub">Overlay fades/disappears after selected time.</p>
+                  </div>
+                </div>
+
+                {/* Motion / Animation Option */}
+                <div className="pt-3 border-t-[2px] border-black/10 space-y-2">
+                  <span className="nb-label">Overlay Placement &amp; Motion Style</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setRenderOptions(prev => ({ ...prev, overlayAnimation: 'static' }))}
+                      className={`border-[3px] border-black p-3 text-left nb-press transition-colors ${
+                        (overlayAnimation !== 'bounce') ? 'bg-yellow-300' : 'bg-white hover:bg-lime-100'
+                      }`}
+                    >
+                      <div className="text-xs font-black">Static Full Frame (Edge-to-Edge)</div>
+                      <div className="text-[10px] font-semibold text-black/60 mt-1">
+                        Stretches and fills the entire screen frame without moving.
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setRenderOptions(prev => ({ ...prev, overlayAnimation: 'bounce' }))}
+                      className={`border-[3px] border-black p-3 text-left nb-press transition-colors ${
+                        (overlayAnimation === 'bounce') ? 'bg-yellow-300' : 'bg-white hover:bg-lime-100'
+                      }`}
+                    >
+                      <div className="text-xs font-black">Bouncing VCD Logo (Animated Motion)</div>
+                      <div className="text-[10px] font-semibold text-black/60 mt-1">
+                        Watermark logo bounces diagonally off screen edges like a retro VCD / DVD player screensaver.
+                      </div>
+                    </button>
                   </div>
                 </div>
               </div>

@@ -264,3 +264,40 @@ def test_build_reencode_render_overlay_timeout(tmp_path):
     graph = cmd[idx_fc + 1]
     assert ":enable='lte(t,30.00)'" in graph
     assert "[2:v][base]scale2ref=w=rw:h=rh" in graph
+
+
+def test_build_reencode_render_bouncing_vcd_logo(tmp_path):
+    image = tmp_path / "vcd_logo.png"
+    image.write_bytes(b"\x89PNG\r\n\x1a\nstub")
+    builder = FFmpegCommandBuilder(ffmpeg_bin="ffmpeg")
+    cmd = builder.build_reencode_render(
+        video_path=Path("/media/clip.mp4"),
+        audio_path=Path("/media/song.mp3"),
+        output_path=Path("/renders/output.mp4"),
+        encoder="libx264",
+        overlay_path=image,
+        overlay_opacity=0.85,
+        overlay_animation="bounce",
+        overlay_timeout=60,
+    )
+    idx_fc = cmd.index("-filter_complex")
+    graph = cmd[idx_fc + 1]
+    assert "scale2ref=w='rw*0.22':h='-1'" in graph
+    assert "overlay=x='(W-w)-abs(mod(0.15*W*t" in graph
+    assert ":enable='lte(t,60.00)'" in graph
+
+
+def test_build_concat_and_mux_audio():
+    builder = FFmpegCommandBuilder(ffmpeg_bin="ffmpeg")
+    cmd = builder.build_concat_and_mux_audio(
+        concat_list_file=Path("/tmp/list.txt"),
+        audio_path=Path("/media/track.mp3"),
+        output_path=Path("/renders/final.mp4"),
+        audio_transcode=True,
+        duration_sec=3600.0,
+    )
+    assert "-f" in cmd and cmd[cmd.index("-f") + 1] == "concat"
+    assert "-c:v" in cmd and cmd[cmd.index("-c:v") + 1] == "copy"
+    assert "-c:a" in cmd and cmd[cmd.index("-c:a") + 1] == "aac"
+    assert cmd[cmd.index("-t") + 1] == "3600.000"
+

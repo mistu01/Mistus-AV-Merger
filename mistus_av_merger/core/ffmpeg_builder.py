@@ -107,6 +107,7 @@ class FFmpegCommandBuilder:
         overlay_path: Optional[Path] = None,
         overlay_opacity: float = 0.8,
         overlay_timeout: Optional[Union[int, float, str]] = None,
+        overlay_animation: str = "static",
         crf: int = 21,
         bitrate_kbps: Optional[int] = None,
         audio_bitrate_kbps: Optional[int] = None,
@@ -171,10 +172,8 @@ class FFmpegCommandBuilder:
         # Combine video filters
         vf_string = ",".join(vfilters) if vfilters else "null"
 
-        # If overlay exists, scale it to cover the full frame, then composite
-        # with the requested opacity. NOTE: overlay's 'alpha' option is a pixel
-        # FORMAT selector, not opacity — real blending requires pre-scaled
-        # alpha via colorchannelmixer (scale2ref input order: overlay first).
+        # If overlay exists, composite with the requested opacity.
+        # Supports full-frame static stretch or bouncing VCD / DVD logo motion.
         if overlay_path and overlay_path.exists():
             enable_clause = ""
             if overlay_timeout is not None:
@@ -187,12 +186,20 @@ class FFmpegCommandBuilder:
                     except ValueError:
                         pass
 
-            vf_string = (
-                f"[0:v]{vf_string}[base];"
-                f"[2:v][base]scale2ref=w=rw:h=rh[ovrl][refw];"
-                f"[ovrl]format=rgba,colorchannelmixer=aa={overlay_opacity:.2f}[ovrlA];"
-                f"[refw][ovrlA]overlay=0:0:format=yuv420{enable_clause}[v_out]"
-            )
+            if str(overlay_animation).lower() in ("bounce", "vcd", "animated"):
+                vf_string = (
+                    f"[0:v]{vf_string}[base];"
+                    f"[2:v][base]scale2ref=w='rw*0.22':h='-1':force_original_aspect_ratio=decrease[ovrl][refw];"
+                    f"[ovrl]format=rgba,colorchannelmixer=aa={overlay_opacity:.2f}[ovrlA];"
+                    f"[refw][ovrlA]overlay=x='(W-w)-abs(mod(0.15*W*t\\,2*(W-w))-(W-w))':y='(H-h)-abs(mod(0.11*H*t\\,2*(H-h))-(H-h))'{enable_clause}[v_out]"
+                )
+            else:
+                vf_string = (
+                    f"[0:v]{vf_string}[base];"
+                    f"[2:v][base]scale2ref=w=rw:h=rh[ovrl][refw];"
+                    f"[ovrl]format=rgba,colorchannelmixer=aa={overlay_opacity:.2f}[ovrlA];"
+                    f"[refw][ovrlA]overlay=0:0:format=yuv420{enable_clause}[v_out]"
+                )
             cmd.extend(["-filter_complex", vf_string, "-map", "[v_out]"])
         else:
             cmd.extend(["-vf", vf_string, "-map", "0:v:0"])
@@ -256,6 +263,8 @@ class FFmpegCommandBuilder:
         noise_seed: int = 1994,
         overlay_path: Optional[Path] = None,
         overlay_opacity: float = 0.8,
+        overlay_animation: str = "static",
+        loop_input: bool = False,
         crf: int = 21,
         bitrate_kbps: Optional[int] = None,
         threads: Optional[int] = None,
@@ -271,8 +280,11 @@ class FFmpegCommandBuilder:
             "-hide_banner",
             "-loglevel", "error",
             "-nostdin",
-            "-i", str(video_path),
         ]
+        if loop_input:
+            cmd.extend(["-stream_loop", "-1"])
+        cmd.extend(["-i", str(video_path)])
+
         if overlay_path and overlay_path.exists():
             cmd.extend(["-i", str(overlay_path)])
 
@@ -301,12 +313,20 @@ class FFmpegCommandBuilder:
         vf_string = ",".join(vfilters) if vfilters else "null"
 
         if overlay_path and overlay_path.exists():
-            vf_string = (
-                f"[0:v]{vf_string}[base];"
-                f"[1:v][base]scale2ref=w=rw:h=rh[ovrl][refw];"
-                f"[ovrl]format=rgba,colorchannelmixer=aa={overlay_opacity:.2f}[ovrlA];"
-                f"[refw][ovrlA]overlay=0:0:format=yuv420[v_out]"
-            )
+            if str(overlay_animation).lower() in ("bounce", "vcd", "animated"):
+                vf_string = (
+                    f"[0:v]{vf_string}[base];"
+                    f"[1:v][base]scale2ref=w='rw*0.22':h='-1':force_original_aspect_ratio=decrease[ovrl][refw];"
+                    f"[ovrl]format=rgba,colorchannelmixer=aa={overlay_opacity:.2f}[ovrlA];"
+                    f"[refw][ovrlA]overlay=x='(W-w)-abs(mod(0.15*W*t\\,2*(W-w))-(W-w))':y='(H-h)-abs(mod(0.11*H*t\\,2*(H-h))-(H-h))'[v_out]"
+                )
+            else:
+                vf_string = (
+                    f"[0:v]{vf_string}[base];"
+                    f"[1:v][base]scale2ref=w=rw:h=rh[ovrl][refw];"
+                    f"[ovrl]format=rgba,colorchannelmixer=aa={overlay_opacity:.2f}[ovrlA];"
+                    f"[refw][ovrlA]overlay=0:0:format=yuv420[v_out]"
+                )
             cmd.extend(["-filter_complex", vf_string, "-map", "[v_out]"])
         else:
             cmd.extend(["-vf", vf_string, "-map", "0:v:0"])
@@ -362,3 +382,45 @@ class FFmpegCommandBuilder:
             "-movflags", "+faststart",
             str(output_path)
         ]
+
+    def build_concat_and_mux_audio(
+        self,
+        concat_list_file: Path,
+        audio_path: Path,
+        output_path: Path,
+        audio_transcode: bool = False,
+        duration_sec: Optional[float] = None,
+        threads: Optional[int] = None,
+    ) -> List[str]:
+        """Concatenates pre-rendered video segments via stream-copy and muxes audio."""
+        cmd = [
+            self.ffmpeg_bin,
+            "-y",
+            "-hide_banner",
+            "-loglevel", "error",
+            "-nostdin",
+            "-f", "concat",
+            "-safe", "0",
+            "-i", str(concat_list_file),
+            "-i", str(audio_path),
+            "-map", "0:v:0",
+            "-map", "1:a:0",
+            "-c:v", "copy",
+        ]
+        if audio_transcode:
+            cmd.extend(["-c:a", "aac", "-b:a", "192k"])
+        else:
+            cmd.extend(["-c:a", "copy"])
+
+        if duration_sec is not None:
+            cmd.extend(["-t", f"{duration_sec:.3f}"])
+
+        if threads:
+            cmd.extend(["-threads", str(threads)])
+
+        cmd.extend([
+            "-movflags", "+faststart",
+            "-progress", "pipe:1",
+            str(output_path)
+        ])
+        return cmd

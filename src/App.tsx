@@ -73,6 +73,7 @@ export default function App() {
     overlayEnabled: false,
     overlayOpacity: 0.8,
     overlayTimeout: 'full',
+    overlayAnimation: 'static',
     sizeTarget: 'balanced',
   });
 

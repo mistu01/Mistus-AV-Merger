@@ -611,33 +611,54 @@ def _execute_job(job: RenderJob):
             filtergraph = preset["filtergraph"] if preset else ""
             noise_static = bool(opts.get("noiseStaticEnabled"))
             video_dur = float(opts.get("video_duration_sec") or 0.0)
+            if not video_dur:
+                video_dur = _pick_probe_duration(video) or 0.0
             audio_dur = float(job.duration or 0.0)
+            if not audio_dur:
+                audio_dur = _pick_probe_duration(audio) or 0.0
             encoder = str(opts.get("encoder") or _pick_encoder())
+            overlay_animation = str(opts.get("overlayAnimation") or "static")
 
             overlay_timeout = opts.get("overlayTimeout")
-            has_timed_overlay = False
+            t_overlay: Optional[float] = None
             if opts.get("overlayPath") and overlay_timeout is not None:
                 str_timeout = str(overlay_timeout).strip().lower()
                 if str_timeout not in ("full", "0", ""):
                     try:
-                        has_timed_overlay = float(str_timeout) > 0
+                        val = float(str_timeout)
+                        if val > 0:
+                            t_overlay = val
                     except ValueError:
                         pass
 
-            # Fast loop-aware pipeline: if video clip is shorter than audio, render the filtered loop once,
-            # then stream-copy loop it across the full audio for 10x-50x speed!
-            # Timed overlays (e.g. first 30s only) change visual content over time, so they use direct encode.
-            if not has_timed_overlay and video_dur > 0 and audio_dur > (video_dur * 1.05):
-                loop_dur = min(audio_dur, max(video_dur, 5.0))
+            # Fast loop-aware pipeline: if video clip is shorter than audio, render at 10x-50x+ magical speed!
+            # Both fulltime and timed overlays (e.g. first 30s, 1m, 2m, 5m only) use fast pre-rendering + stream-copy.
+            if video_dur > 0 and audio_dur > (video_dur * 1.05):
+                from math import ceil
                 from mistus_av_merger.config import get_temp_dir
-                temp_loop = get_temp_dir() / f"filtered_loop_{job.job_id}.mp4"
-                temp_loop.parent.mkdir(parents=True, exist_ok=True)
+                temp_dir = get_temp_dir()
+                temp_dir.mkdir(parents=True, exist_ok=True)
 
-                def _build_loop_cmd(enc: str) -> List[str]:
-                    return ffmpeg_builder.build_filtered_loop_clip(
+                # Sub-case A: Timed overlay (e.g. first 30s, 1m, 2m, 5m only)
+                if t_overlay is not None and t_overlay < audio_dur:
+                    temp_seg_a = temp_dir / f"timed_seg_a_{job.job_id}.mp4"
+                    temp_loop_clean = temp_dir / f"clean_loop_{job.job_id}.mp4"
+                    temp_seg_b = temp_dir / f"timed_seg_b_{job.job_id}.mp4"
+                    concat_list = temp_dir / f"concat_{job.job_id}.txt"
+
+                    rem_dur = audio_dur - t_overlay
+                    clean_loop_dur = min(rem_dur, max(video_dur, 5.0))
+
+                    job.logs.append(
+                        f"[info] Fast timed overlay pipeline: pre-rendering {t_overlay:.1f}s overlay segment + "
+                        f"stream-copy looping remaining {rem_dur:.1f}s ({encoder})..."
+                    )
+
+                    # 1. Pre-render Segment A with overlay for t_overlay seconds
+                    cmd_a = ffmpeg_builder.build_filtered_loop_clip(
                         video_path=video,
-                        output_path=temp_loop,
-                        encoder=enc,
+                        output_path=temp_seg_a,
+                        encoder=encoder,
                         resolution=str(opts.get("resolution") or "original"),
                         filtergraph=filtergraph,
                         night_mode=bool(opts.get("nightModeEnabled")),
@@ -646,42 +667,160 @@ def _execute_job(job: RenderJob):
                         noise_seed=int(opts.get("noiseSeed") or 1994),
                         overlay_path=Path(str(opts.get("overlayPath"))) if opts.get("overlayPath") else None,
                         overlay_opacity=float(opts.get("overlayOpacity", 0.8)),
-                        duration_sec=loop_dur,
+                        overlay_animation=overlay_animation,
+                        loop_input=(video_dur < t_overlay),
+                        duration_sec=t_overlay,
                         bitrate_kbps=int(opts["videoBitrateKbps"]) if opts.get("videoBitrateKbps") else None,
                         threads=job_threads,
                     )
+                    job.encoder = encoder
+                    _run_render_process(job, cmd_a)
 
-                job.logs.append(f"[info] Fast loop pipeline: pre-rendering {loop_dur:.1f}s loop clip ({encoder})...")
-                command = _build_loop_cmd(encoder)
-                job.encoder = encoder
-                _run_render_process(job, command)
+                    if job.status != "completed":
+                        sw = _sw_fallback_encoder(encoder)
+                        if sw:
+                            job.logs.append(f"[warn] {encoder} failed; retrying with {sw}")
+                            encoder = sw
+                            job.encoder = encoder
+                            cmd_a = ffmpeg_builder.build_filtered_loop_clip(
+                                video_path=video,
+                                output_path=temp_seg_a,
+                                encoder=encoder,
+                                resolution=str(opts.get("resolution") or "original"),
+                                filtergraph=filtergraph,
+                                night_mode=bool(opts.get("nightModeEnabled")),
+                                night_intensity=float(opts.get("nightIntensity", 0.7)),
+                                noise_static=noise_static,
+                                noise_seed=int(opts.get("noiseSeed") or 1994),
+                                overlay_path=Path(str(opts.get("overlayPath"))) if opts.get("overlayPath") else None,
+                                overlay_opacity=float(opts.get("overlayOpacity", 0.8)),
+                                overlay_animation=overlay_animation,
+                                loop_input=(video_dur < t_overlay),
+                                duration_sec=t_overlay,
+                                bitrate_kbps=int(opts["videoBitrateKbps"]) if opts.get("videoBitrateKbps") else None,
+                                threads=job_threads,
+                            )
+                            _run_render_process(job, cmd_a)
 
-                if job.status != "completed":
-                    sw = _sw_fallback_encoder(encoder)
-                    if sw:
-                        job.logs.append(f"[warn] {encoder} failed; retrying with {sw}")
-                        encoder = sw
-                        job.encoder = encoder
-                        command = _build_loop_cmd(encoder)
-                        _run_render_process(job, command)
+                    if job.status == "completed" and temp_seg_a.exists():
+                        # 2. Pre-render clean loop without overlay (clean_loop_dur seconds)
+                        cmd_b_clean = ffmpeg_builder.build_filtered_loop_clip(
+                            video_path=video,
+                            output_path=temp_loop_clean,
+                            encoder=encoder,
+                            resolution=str(opts.get("resolution") or "original"),
+                            filtergraph=filtergraph,
+                            night_mode=bool(opts.get("nightModeEnabled")),
+                            night_intensity=float(opts.get("nightIntensity", 0.7)),
+                            noise_static=noise_static,
+                            noise_seed=int(opts.get("noiseSeed") or 1994),
+                            overlay_path=None,  # No overlay in Segment B!
+                            duration_sec=clean_loop_dur,
+                            bitrate_kbps=int(opts["videoBitrateKbps"]) if opts.get("videoBitrateKbps") else None,
+                            threads=job_threads,
+                        )
+                        _run_render_process(job, cmd_b_clean)
 
-                if job.status == "completed" and temp_loop.exists():
-                    job.logs.append(f"[info] Stream-copy looping across {audio_dur:.1f}s audio track...")
-                    copy_cmd = ffmpeg_builder.build_stream_copy_loop(
-                        video_path=temp_loop,
-                        audio_path=audio,
-                        output_path=output,
-                        audio_transcode=_needs_audio_transcode(audio, output),
-                        audio_duration_sec=audio_dur,
-                        video_duration_sec=loop_dur,
-                        threads=job_threads,
-                    )
-                    _run_render_process(job, copy_cmd)
-                    try:
-                        temp_loop.unlink(missing_ok=True)
-                    except Exception:
-                        pass
-                return
+                    if job.status == "completed" and temp_loop_clean.exists():
+                        # 3. Stream-copy loop Segment B for remaining rem_dur
+                        loop_count = max(1, ceil(rem_dur / clean_loop_dur - 1e-6))
+                        copy_b_cmd = [
+                            ffmpeg_builder.ffmpeg_bin,
+                            "-y", "-hide_banner", "-loglevel", "error", "-nostdin",
+                            "-stream_loop", str(loop_count - 1),
+                            "-i", str(temp_loop_clean),
+                            "-t", f"{rem_dur:.3f}",
+                            "-c:v", "copy", "-an",
+                            "-movflags", "+faststart",
+                            "-progress", "pipe:1",
+                            str(temp_seg_b),
+                        ]
+                        _run_render_process(job, copy_b_cmd)
+
+                    if job.status == "completed" and temp_seg_b.exists():
+                        # 4. Concat A + B and mux with audio
+                        concat_list.write_text(
+                            f"file '{temp_seg_a.as_posix()}'\nfile '{temp_seg_b.as_posix()}'\n",
+                            encoding="utf-8"
+                        )
+                        job.logs.append(f"[info] Concat & muxing across {audio_dur:.1f}s audio track...")
+                        concat_cmd = ffmpeg_builder.build_concat_and_mux_audio(
+                            concat_list_file=concat_list,
+                            audio_path=audio,
+                            output_path=output,
+                            audio_transcode=_needs_audio_transcode(audio, output),
+                            duration_sec=audio_dur,
+                            threads=job_threads,
+                        )
+                        _run_render_process(job, concat_cmd)
+
+                    for f in (temp_seg_a, temp_loop_clean, temp_seg_b, concat_list):
+                        try:
+                            f.unlink(missing_ok=True)
+                        except Exception:
+                            pass
+                    return
+
+                # Sub-case B: Fulltime overlay or no timeout
+                else:
+                    if overlay_animation in ("bounce", "vcd", "animated"):
+                        loop_dur = min(audio_dur, max(video_dur, 25.0))
+                    else:
+                        loop_dur = min(audio_dur, max(video_dur, 5.0))
+
+                    temp_loop = temp_dir / f"filtered_loop_{job.job_id}.mp4"
+
+                    def _build_loop_cmd(enc: str) -> List[str]:
+                        return ffmpeg_builder.build_filtered_loop_clip(
+                            video_path=video,
+                            output_path=temp_loop,
+                            encoder=enc,
+                            resolution=str(opts.get("resolution") or "original"),
+                            filtergraph=filtergraph,
+                            night_mode=bool(opts.get("nightModeEnabled")),
+                            night_intensity=float(opts.get("nightIntensity", 0.7)),
+                            noise_static=noise_static,
+                            noise_seed=int(opts.get("noiseSeed") or 1994),
+                            overlay_path=Path(str(opts.get("overlayPath"))) if opts.get("overlayPath") else None,
+                            overlay_opacity=float(opts.get("overlayOpacity", 0.8)),
+                            overlay_animation=overlay_animation,
+                            loop_input=(video_dur < loop_dur),
+                            duration_sec=loop_dur,
+                            bitrate_kbps=int(opts["videoBitrateKbps"]) if opts.get("videoBitrateKbps") else None,
+                            threads=job_threads,
+                        )
+
+                    job.logs.append(f"[info] Fast loop pipeline: pre-rendering {loop_dur:.1f}s loop clip ({encoder})...")
+                    command = _build_loop_cmd(encoder)
+                    job.encoder = encoder
+                    _run_render_process(job, command)
+
+                    if job.status != "completed":
+                        sw = _sw_fallback_encoder(encoder)
+                        if sw:
+                            job.logs.append(f"[warn] {encoder} failed; retrying with {sw}")
+                            encoder = sw
+                            job.encoder = encoder
+                            command = _build_loop_cmd(encoder)
+                            _run_render_process(job, command)
+
+                    if job.status == "completed" and temp_loop.exists():
+                        job.logs.append(f"[info] Stream-copy looping across {audio_dur:.1f}s audio track...")
+                        copy_cmd = ffmpeg_builder.build_stream_copy_loop(
+                            video_path=temp_loop,
+                            audio_path=audio,
+                            output_path=output,
+                            audio_transcode=_needs_audio_transcode(audio, output),
+                            audio_duration_sec=audio_dur,
+                            video_duration_sec=loop_dur,
+                            threads=job_threads,
+                        )
+                        _run_render_process(job, copy_cmd)
+                        try:
+                            temp_loop.unlink(missing_ok=True)
+                        except Exception:
+                            pass
+                    return
 
             def _build_encode_command(encoder: str) -> List[str]:
                 return ffmpeg_builder.build_reencode_render(
@@ -698,6 +837,7 @@ def _execute_job(job: RenderJob):
                     overlay_path=Path(str(opts.get("overlayPath"))) if opts.get("overlayPath") else None,
                     overlay_opacity=float(opts.get("overlayOpacity", 0.8)),
                     overlay_timeout=opts.get("overlayTimeout"),
+                    overlay_animation=overlay_animation,
                     duration_sec=job.duration or None,
                     bitrate_kbps=int(opts["videoBitrateKbps"]) if opts.get("videoBitrateKbps") else None,
                     audio_bitrate_kbps=int(opts["audioBitrateKbps"]) if opts.get("audioBitrateKbps") else None,
