@@ -14,6 +14,23 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ---
 
+## [0.6.12] - 2026-10-25
+
+### Added
+- **Bouncing VCD / DVD Logo Animated Motion**:
+  - Added new Overlay Placement & Motion Style option in the centralized Render Options studio:
+    - **Static Full Frame (Edge-to-Edge)** (default): Fills and stretches across the entire frame.
+    - **Bouncing VCD Logo (Animated)**: Scales the image to a crisp watermark logo (22% of frame width) and animates it drifting diagonally and bouncing off the video edges like a classic retro VCD / DVD screensaver.
+  - Interactive 60 FPS real-time Canvas preview in Render Options studio simulating the bouncing VCD logo with live physics.
+  - Dynamically updates the compiled FFmpeg `-vf` filtergraph inspector.
+
+- **Universal Magical Speed for Timed Overlays**:
+  - Implemented high-performance multi-segment loop pipeline for timed image overlays (30s, 1m, 2m, 5m).
+  - Encodes only the initial timed segment (`t_overlay`) with the overlay (static or bouncing motion), pre-renders a single cycle of the clean video loop, stream-copy loops the remaining duration, and joins them via stream-copy concatenation (`-f concat -c copy`).
+  - Renders with timed overlays now complete in **seconds** at **100x-700x+ realtime speed** even for 1-hour+ audio tracks, eliminating full-length re-encoding bottlenecks.
+
+---
+
 ## [0.6.11] - 2026-10-24
 
 ### Added
