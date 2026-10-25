@@ -14,6 +14,13 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ---
 
+## [0.6.13] - 2026-10-25
+
+### Changed
+- **Bouncing VCD Logo Scale**: Increased bouncing logo scale from 22% to **40% of frame width** for enhanced visibility while maintaining source aspect ratio and retro screensaver bounce physics.
+
+---
+
 ## [0.6.12] - 2026-10-25
 
 ### Added
