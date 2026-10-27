@@ -15,6 +15,7 @@ import {
   Info,
   Power,
 } from 'lucide-react';
+import { BrandLogo } from './BrandLogo';
 
 interface HeaderProps {
   activeTab: 'single' | 'bulk' | 'queue' | 'effects';
@@ -55,9 +56,7 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex items-center justify-between h-16 gap-4">
           {/* Logo & Brand */}
           <div className="flex items-center gap-3 shrink-0">
-            <div className="w-10 h-10 border-[3px] border-black bg-yellow-300 flex items-center justify-center shadow-[3px_3px_0_#000]">
-              <Film className="w-5 h-5" />
-            </div>
+            <BrandLogo size={42} className="shrink-0" />
             <div>
               <div className="flex items-center gap-2">
                 <span className="nb-title text-base">Mistus AV Merger</span>

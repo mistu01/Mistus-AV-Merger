@@ -4,7 +4,8 @@
  */
 
 import React from 'react';
-import { Film, CheckCircle2, X } from 'lucide-react';
+import { CheckCircle2, X } from 'lucide-react';
+import { BrandLogo } from './BrandLogo';
 
 interface AboutModalProps {
   isOpen: boolean;
@@ -20,7 +21,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
         {/* Header */}
         <div className="bg-yellow-300 border-b-[3px] border-black px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Film className="w-4 h-4" />
+            <BrandLogo size={20} className="shrink-0" />
             <h3 className="nb-title text-sm">About</h3>
           </div>
           <button onClick={onClose} className="nb-btn nb-btn-sm nb-btn-white nb-press p-1.5">
@@ -30,8 +31,8 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
 
         {/* Content */}
         <div className="p-6 text-center space-y-4 text-xs bg-white">
-          <div className="w-14 h-14 border-[3px] border-black bg-pink-400 mx-auto flex items-center justify-center shadow-[4px_4px_0_#000]">
-            <Film className="w-7 h-7" />
+          <div className="flex justify-center">
+            <BrandLogo size={72} />
           </div>
 
           <div>
