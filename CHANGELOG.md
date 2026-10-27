@@ -14,6 +14,18 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ---
 
+## [0.6.14] - 2026-10-27
+
+### Added
+- **Custom Neo-Brutalist App Icon & Branding**:
+  - Designed bespoke vector Neo-Brutalist icon featuring retro cassette tape spools (dual Audio equalizer spoke reel and Video film reel), magnetic loop tape, center play triangle, audio waveform equalizer card, video filmstrip preview screen, infinity merge loop badge, and 4-point acid-lime brutalist sparkle star.
+  - Palette matches the app's high-voltage Neo-Brutalist aesthetic: Cyber Yellow (#FDE047), Hot Neon Pink (#FF4F87), Sky Cyan (#38BDF8), and Acid Lime (#A3E635) with bold black strokes and pitch-black drop shadows.
+  - Added multi-resolution web & desktop assets: public/icon.svg, public/favicon.svg, public/favicon.ico (16x16 up to 256x256), and public/icon-512.png (512x512 PWA / Apple Touch icon).
+  - Created reusable <BrandLogo /> React SVG component and integrated it into the app Header and AboutModal.
+  - Updated index.html with vector and fallback favicon and apple-touch-icon links.
+
+---
+
 ## [0.6.13] - 2026-10-25
 
 ### Changed
