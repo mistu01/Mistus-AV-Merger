@@ -275,7 +275,7 @@ def is_output_file_complete(
         from mistus_av_merger.core.binaries import get_ffprobe_path
         probe_bin = ffprobe_bin or str(get_ffprobe_path())
 
-        creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+        creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         cmd = [
             probe_bin,
             "-v", "error",

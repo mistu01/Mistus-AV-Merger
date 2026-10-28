@@ -119,9 +119,13 @@ export const QueueView: React.FC<QueueViewProps> = ({
 
           <div className="flex flex-wrap items-center gap-2">
             {!isRendering && !isPaused ? (
-              <button onClick={onStartAll} disabled={jobs.length === 0 || completedCount === jobs.length}
-                className="nb-btn nb-btn-lime nb-press disabled:opacity-40" title="Start Queue">
-                <Play className="w-3.5 h-3.5 fill-black" /> Start Queue
+              <button
+                onClick={onStartAll}
+                disabled={jobs.length === 0}
+                className="nb-btn nb-btn-lime nb-press disabled:opacity-40"
+                title={completedCount === jobs.length && jobs.length > 0 ? "Restart Queue & verify files" : "Start Queue"}
+              >
+                <Play className="w-3.5 h-3.5 fill-black" /> {completedCount === jobs.length && jobs.length > 0 ? 'Restart Queue' : 'Start Queue'}
               </button>
             ) : isPaused ? (
               <button onClick={onResumeAll} className="nb-btn nb-btn-lime nb-press">

@@ -3,8 +3,9 @@ Hardware encoder detection and probing engine.
 Performs real micro-encodes to verify hardware acceleration viability.
 """
 
-import subprocess
 import shutil
+import subprocess
+import sys
 from typing import Dict, List, Optional, Tuple
 
 
@@ -36,7 +37,7 @@ def probe_encoder_actual(encoder_name: str, extra_args: Optional[List[str]] = No
     ])
 
     try:
-        creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+        creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=4, creationflags=creationflags)
         return res.returncode == 0
     except Exception:

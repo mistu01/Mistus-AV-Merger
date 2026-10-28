@@ -9,8 +9,12 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ## [Unreleased]
 
-### Planned
-- (nothing yet)
+### Fixed
+- **Scanner & Hardware Probe NameError**: Resolved `NameError: name 'sys' is not defined` in `scanner.py` and `hwdetect.py`, restoring directory scanning, audio/video file probing, and hardware GPU encoder detection.
+- **Queue Start & Re-run Capability**:
+  - Fixed Start Queue button being permanently disabled when all queue items were marked completed. The button now displays "Restart Queue" and stays clickable whenever jobs exist.
+  - Calling `start_queue` when all jobs are completed resets them to `queued`, allowing the queue to run a 2nd or 3rd time while rapidly skipping files that already exist complete on disk.
+  - Re-queuing jobs in `add_jobs` now properly reactivates completed jobs if their output file was removed or needs re-rendering.
 
 ---
 

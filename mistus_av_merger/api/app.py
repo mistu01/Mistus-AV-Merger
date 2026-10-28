@@ -533,28 +533,29 @@ def add_jobs(req: QueueAddRequest):
         video_path = Path(str(raw.get("video_path", "")))
         output_path = Path(str(raw.get("output_path", "")))
 
-        # 1. Prevent duplicate jobs if the exact same output / AV pair is already tracked
+        # 1. Carefully skip if output file already exists on disk and is complete
+        audio_dur_pre = raw.get("duration")
+        if not audio_dur_pre and audio_path.exists():
+            audio_dur_pre = _pick_probe_duration(audio_path) or 0.0
+
+        if req.skip_existing and output_path.exists() and is_output_file_complete(output_path, float(audio_dur_pre or 0.0), scanner.ffprobe_bin):
+            continue
+
+        # 2. Prevent duplicate active jobs if already tracked in queue
         existing = next(
             (j for j in queue_mgr.jobs if j.output_path == str(output_path) or
              (j.audio_path == str(audio_path) and j.video_path == str(video_path))),
             None
         )
         if existing:
-            if existing.status in ("completed", "rendering", "queued"):
+            if existing.status in ("rendering", "queued"):
                 continue
-            elif existing.status == "failed":
+            elif existing.status in ("failed", "completed"):
                 existing.status = "queued"
                 existing.progress = 0.0
+                existing.logs.append("[info] Re-queued by user.")
                 added.append(existing.to_dict())
                 continue
-
-        # 2. Carefully skip if output file already exists on disk and is complete
-        audio_dur_pre = raw.get("duration")
-        if not audio_dur_pre and audio_path.exists():
-            audio_dur_pre = _pick_probe_duration(audio_path) or 0.0
-
-        if output_path.exists() and is_output_file_complete(output_path, float(audio_dur_pre or 0.0), scanner.ffprobe_bin):
-            continue
 
         if not audio_path.exists():
             raise HTTPException(status_code=400, detail=f"Audio file not found: {audio_path}")
@@ -612,7 +613,7 @@ def add_jobs(req: QueueAddRequest):
         queue_mgr.add_job(job)
         added.append(job.to_dict())
 
-    if req.auto_start and added and not queue_mgr.is_running:
+    if req.auto_start and not queue_mgr.is_running and any(j.status == "queued" for j in queue_mgr.jobs):
         queue_mgr.is_running = True
 
     return {"added": added, "queue": [j.to_dict() for j in queue_mgr.jobs]}
@@ -1017,9 +1018,18 @@ threading.Thread(target=_render_worker_loop, name="render-worker", daemon=True).
 def start_queue():
     queue_mgr.is_running = True
     queue_mgr.is_paused = False
-    for job in queue_mgr.jobs:
-        if job.status == "paused":
-            queue_mgr.resume_job(job.job_id)
+    has_queued = any(j.status in ("queued", "paused") for j in queue_mgr.jobs)
+    if not has_queued and queue_mgr.jobs:
+        # Starting queue 2nd or 3rd time with completed jobs:
+        # Re-queue so worker verifies files, rapidly skipping complete ones
+        for job in queue_mgr.jobs:
+            job.status = "queued"
+            job.progress = 0.0
+    else:
+        for job in queue_mgr.jobs:
+            if job.status == "paused":
+                queue_mgr.resume_job(job.job_id)
+    queue_mgr.save_session()
     return {"status": "started", "queue": [j.to_dict() for j in queue_mgr.jobs]}
 
 
