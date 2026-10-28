@@ -14,6 +14,26 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ---
 
+## [0.6.15] - 2026-10-28
+
+### Fixed
+- **Queue Count Badge Cut-off**: Fixed navigation bar queue count badge clipping caused by `overflow-hidden` on `<nav>` by positioning the neo-brutalist badge inline inside the button, ensuring counts (e.g. 203+) never get cut off.
+- **Hidden Terminal Window**: Removed floating console window on Windows. `MistusAVMerger.spec` now builds as a windowed application (`console=False`), and `main.py` hides any attached console window automatically on launch while safely handling stdio streams and allowing explicit `--console` for debugging.
+- **Child Process Console Flashing**: Added `CREATE_NO_WINDOW` flags to all `scanner.py`, `hwdetect.py`, and `main.py` subprocess calls.
+
+### Added
+- **Crash-Safe Queue Persistence & Seamless Auto-Resume**:
+  - Interrupted renders from PC shutdowns or force-closes are recovered automatically from `active_session.json` and reset to `queued` to resume exactly where they exited.
+  - Active running state (`is_running`) is persisted and restored, allowing queues to pick up immediately without user intervention.
+  - Session file writes are now atomic via temporary file swap to eliminate session file corruption risks during sudden power cuts.
+- **Intelligent Existing File Skipping**:
+  - Implemented `is_output_file_complete` verification using `ffprobe` to ensure already rendered output files in target directories are safely skipped on 2nd or 3rd queue starts.
+  - Incomplete or corrupted partial files from aborts/crashes are detected and cleaned up before fresh re-renders.
+  - Duplicate queue entries for the same output target or audio-video pairs are automatically prevented.
+- **Silent Windows Launcher**: Added `run_hidden.vbs` to launch Mistus AV Merger silently without flashing a command prompt window.
+
+---
+
 ## [0.6.14] - 2026-10-27
 
 ### Added
