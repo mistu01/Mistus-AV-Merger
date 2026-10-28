@@ -79,8 +79,8 @@ export const Header: React.FC<HeaderProps> = ({
                 <span className="hidden md:inline">{tab.label}</span>
                 {tab.id === 'queue' && queueCount > 0 && (
                   <span
-                    className={`absolute -top-2 -right-2 text-[10px] font-black px-1.5 py-0 border-2 border-black ${
-                      activeJobsCount > 0 ? 'bg-red-400 animate-pulse' : 'bg-black text-white'
+                    className={`ml-1 px-1.5 py-0.5 text-[10px] font-black leading-none border-2 border-black shadow-[1px_1px_0_#000] shrink-0 ${
+                      activeJobsCount > 0 ? 'bg-red-400 text-black animate-pulse' : 'bg-black text-white'
                     }`}
                   >
                     {queueCount}

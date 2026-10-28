@@ -23,7 +23,7 @@ from mistus_av_merger.config import SettingsManager, get_app_root, is_portable_m
 from mistus_av_merger.core._build_info import BUILD_INFO
 from mistus_av_merger.core.ffmpeg_builder import FFmpegCommandBuilder
 from mistus_av_merger.core.hwdetect import HardwareDetector
-from mistus_av_merger.core.jobs import JobQueueManager, RenderJob
+from mistus_av_merger.core.jobs import JobQueueManager, RenderJob, is_output_file_complete
 from mistus_av_merger.core.pairing import AutoPairingEngine
 from mistus_av_merger.core.presets import PresetManager
 from mistus_av_merger.core.scanner import (
@@ -532,8 +532,30 @@ def add_jobs(req: QueueAddRequest):
         audio_path = Path(str(raw.get("audio_path", "")))
         video_path = Path(str(raw.get("video_path", "")))
         output_path = Path(str(raw.get("output_path", "")))
-        if req.skip_existing and output_path.exists() and output_path.stat().st_size > 0:
+
+        # 1. Prevent duplicate jobs if the exact same output / AV pair is already tracked
+        existing = next(
+            (j for j in queue_mgr.jobs if j.output_path == str(output_path) or
+             (j.audio_path == str(audio_path) and j.video_path == str(video_path))),
+            None
+        )
+        if existing:
+            if existing.status in ("completed", "rendering", "queued"):
+                continue
+            elif existing.status == "failed":
+                existing.status = "queued"
+                existing.progress = 0.0
+                added.append(existing.to_dict())
+                continue
+
+        # 2. Carefully skip if output file already exists on disk and is complete
+        audio_dur_pre = raw.get("duration")
+        if not audio_dur_pre and audio_path.exists():
+            audio_dur_pre = _pick_probe_duration(audio_path) or 0.0
+
+        if output_path.exists() and is_output_file_complete(output_path, float(audio_dur_pre or 0.0), scanner.ffprobe_bin):
             continue
+
         if not audio_path.exists():
             raise HTTPException(status_code=400, detail=f"Audio file not found: {audio_path}")
         if not video_path.exists():
@@ -605,6 +627,22 @@ def _execute_job(job: RenderJob):
     opts = job.options or {}
 
     try:
+        # Carefully check if output already exists on disk and is complete (e.g. running queue 2nd or 3rd time)
+        if is_output_file_complete(output, float(job.duration or 0.0), scanner.ffprobe_bin):
+            job.status = "completed"
+            job.progress = 100.0
+            job.speed = "skipped"
+            job.eta_seconds = 0
+            job.logs.append(f"[info] Output file already exists and is complete: {output.name}. Skipped.")
+            queue_mgr.save_session()
+            return
+        elif output.exists():
+            # Incomplete partial file from an earlier crash or aborted render - remove before fresh render
+            try:
+                output.unlink(missing_ok=True)
+            except Exception:
+                pass
+
         job_threads = int(opts.get("threads") or 0) or queue_mgr.threads_for_profile()
         if job.mode == "encode":
             preset = preset_mgr.get_preset(str(opts.get("vhsPreset") or "none"))

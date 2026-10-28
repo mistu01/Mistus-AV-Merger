@@ -36,7 +36,8 @@ def probe_encoder_actual(encoder_name: str, extra_args: Optional[List[str]] = No
     ])
 
     try:
-        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=4)
+        creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=4, creationflags=creationflags)
         return res.returncode == 0
     except Exception:
         return False

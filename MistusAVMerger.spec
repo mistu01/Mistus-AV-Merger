@@ -75,13 +75,13 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,  # UPX corrupts/invalidates signed AV binaries and macOS codesign
-    console=True,
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,  # never universal2: separate arm64 and x64 builds
     codesign_identity=None,
     entitlements_file=None,
-    icon=str(root / "assets" / "icon.ico") if (root / "assets" / "icon.ico").exists() else None,
+    icon=str(root / "public" / "favicon.ico") if (root / "public" / "favicon.ico").exists() else (str(root / "assets" / "icon.ico") if (root / "assets" / "icon.ico").exists() else None),
 )
 
 coll = COLLECT(

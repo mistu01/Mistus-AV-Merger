@@ -4,12 +4,46 @@ Finds a free port, starts Uvicorn bound to 127.0.0.1, opens default browser, and
 """
 
 import argparse
+import os
 import shutil
 import socket
 import sys
 import threading
 import time
 import webbrowser
+
+# PyInstaller / GUI windowed safety
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, "w", encoding="utf-8")
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, "w", encoding="utf-8")
+
+
+def _configure_windows_console():
+    """Hides the terminal window on Windows unless explicit CLI flags are provided."""
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        is_cli = any(arg in sys.argv for arg in ("--version", "--help", "-h", "--self-test", "--console"))
+        if is_cli:
+            # Attach to caller console if invoked from cmd/powershell/bash
+            if ctypes.windll.kernel32.AttachConsole(-1):
+                try:
+                    sys.stdout = open("CONOUT$", "w", encoding="utf-8")
+                    sys.stderr = open("CONOUT$", "w", encoding="utf-8")
+                except Exception:
+                    pass
+        else:
+            # Hide the console window so no floating terminal window stays on screen
+            hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+            if hwnd:
+                ctypes.windll.user32.ShowWindow(hwnd, 0)  # 0 = SW_HIDE
+    except Exception:
+        pass
+
+
+_configure_windows_console()
 from pathlib import Path
 from typing import Optional
 
@@ -131,6 +165,7 @@ def main():
     parser.add_argument("--no-browser", action="store_true", help="Do not open default browser automatically")
     parser.add_argument("--self-test", action="store_true",
                         help="Run the offline bundled-FFmpeg smoke test and exit (no server)")
+    parser.add_argument("--console", action="store_true", help="Keep terminal console window visible for debugging")
     args = parser.parse_args()
 
     if args.version:

@@ -177,7 +177,7 @@ class JobQueueManager:
             print(f"[Warning] Failed to resume job {job_id}: {e}")
 
     def save_session(self):
-        """Persists current queue state to active_session.json."""
+        """Persists current queue state to active_session.json atomically."""
         try:
             data = {
                 "schema_version": 2,
@@ -188,13 +188,15 @@ class JobQueueManager:
                 },
                 "jobs": [{**j.to_dict(), "options": j.options} for j in self.jobs],
             }
-            with open(self.session_file, "w", encoding="utf-8") as f:
+            tmp_file = self.session_file.with_suffix(".tmp")
+            with open(tmp_file, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
+            os.replace(tmp_file, self.session_file)
         except Exception as e:
             print(f"[Warning] Failed to persist session: {e}")
 
     def load_session(self):
-        """Restores queue from session file if available."""
+        """Restores queue from session file if available, recovering interrupted renders."""
         if not self.session_file.exists():
             return
         try:
@@ -206,21 +208,111 @@ class JobQueueManager:
                 self.cpu_profile = settings["cpu_profile"]
             if isinstance(settings.get("concurrency"), int):
                 self.concurrency = max(1, min(4, settings["concurrency"]))
-            # Rehydrate unfinished jobs
+            if isinstance(settings.get("is_running"), bool):
+                self.is_running = settings["is_running"]
+            self.is_paused = False
+
+            # Rehydrate jobs preserving queue order and crash state
+            self.jobs = []
             for jd in data.get("jobs", []):
-                if jd.get("status") in ("queued", "paused", "failed"):
-                    job = RenderJob(
-                        job_id=jd["id"],
-                        audio_path=jd.get("audioPath", ""),
-                        video_path=jd.get("videoPath", ""),
-                        output_path=jd.get("outputPath", ""),
-                        mode=jd.get("mode", "copy"),
-                        mode_reason=jd.get("modeReason", ""),
-                        duration=jd.get("duration", 0),
-                        options=dict(jd.get("options") or {}),
-                    )
-                    job.total_segments = max(1, int(jd.get("totalSegments") or 1))
+                raw_status = jd.get("status", "queued")
+                job = RenderJob(
+                    job_id=jd["id"],
+                    audio_path=jd.get("audioPath", ""),
+                    video_path=jd.get("videoPath", ""),
+                    output_path=jd.get("outputPath", ""),
+                    mode=jd.get("mode", "copy"),
+                    mode_reason=jd.get("modeReason", ""),
+                    duration=float(jd.get("duration") or 0.0),
+                    options=dict(jd.get("options") or {}),
+                )
+                job.total_segments = max(1, int(jd.get("totalSegments") or 1))
+                job.encoder = str(jd.get("encoder") or "-")
+                job.logs = list(jd.get("logs") or [])
+
+                if raw_status == "completed":
+                    job.status = "completed"
+                    job.progress = 100.0
+                    job.speed = "-"
+                    job.eta_seconds = 0
+                elif raw_status == "rendering":
+                    # Accidental exit / PC shutdown interrupted this render.
+                    # Reset to queued so it resumes exactly where it left off.
                     job.status = "queued"
-                    self.jobs.append(job)
+                    job.progress = 0.0
+                    job.logs.append("[info] Resumed after unexpected exit / PC shutdown.")
+                elif raw_status == "paused":
+                    job.status = "queued"
+                    job.progress = 0.0
+                elif raw_status == "failed":
+                    job.status = "failed"
+                    job.progress = float(jd.get("progress") or 0.0)
+                else:
+                    job.status = "queued"
+                    job.progress = 0.0
+
+                self.jobs.append(job)
         except Exception as e:
             print(f"[Warning] Failed to reload session: {e}")
+
+
+def is_output_file_complete(
+    output_path: Path,
+    expected_duration: float = 0.0,
+    ffprobe_bin: Optional[str] = None,
+) -> bool:
+    """
+    Carefully inspects an output file to determine if it already exists and is a complete,
+    valid render (not a truncated or 0-byte corrupt artifact from an interrupted run).
+    """
+    try:
+        if not output_path.is_file():
+            return False
+        # If file is too small (< 2KB), it cannot be a valid video render
+        if output_path.stat().st_size < 2048:
+            return False
+
+        from mistus_av_merger.core.binaries import get_ffprobe_path
+        probe_bin = ffprobe_bin or str(get_ffprobe_path())
+
+        creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+        cmd = [
+            probe_bin,
+            "-v", "error",
+            "-print_format", "json",
+            "-show_format",
+            "-show_streams",
+            str(output_path),
+        ]
+        res = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=8,
+            creationflags=creationflags,
+        )
+        if res.returncode != 0:
+            return False
+
+        data = json.loads(res.stdout.decode("utf-8", errors="replace"))
+        fmt = data.get("format", {})
+        streams = data.get("streams", [])
+
+        # Must have at least 1 video stream and 1 audio stream
+        has_video = any(s.get("codec_type") == "video" for s in streams)
+        has_audio = any(s.get("codec_type") == "audio" for s in streams)
+        if not has_video or not has_audio:
+            return False
+
+        # If expected_duration is known (> 1.0s), verify file duration is complete
+        file_duration = float(fmt.get("duration", 0.0))
+        if expected_duration > 1.0:
+            # Complete if within 2.5s of expected duration, or >= 98% of expected duration
+            if file_duration < (expected_duration - 2.5) and file_duration < (expected_duration * 0.98):
+                return False
+        elif file_duration <= 0.5:
+            return False
+
+        return True
+    except Exception:
+        return False

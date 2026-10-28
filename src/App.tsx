@@ -357,7 +357,7 @@ export default function App() {
     fetch(`${API}/api/v1/queue/add`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jobs: [payload] }),
+      body: JSON.stringify({ jobs: [payload], skip_existing: true }),
     }).catch(() => undefined);
     setActiveTab('queue');
   };
@@ -370,7 +370,7 @@ export default function App() {
     fetch(`${API}/api/v1/queue/add`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jobs: payload }),
+      body: JSON.stringify({ jobs: payload, skip_existing: true }),
     }).catch(() => undefined);
     setActiveTab('queue');
   };
