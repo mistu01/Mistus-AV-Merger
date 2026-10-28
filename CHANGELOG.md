@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ## [Unreleased]
 
+### Planned
+- (nothing yet)
+
+---
+
+## [0.6.17] - 2026-10-28
+
 ### Fixed
 - **Scanner & Hardware Probe NameError**: Resolved `NameError: name 'sys' is not defined` in `scanner.py` and `hwdetect.py`, restoring directory scanning, audio/video file probing, and hardware GPU encoder detection.
 - **Queue Start & Re-run Capability**:
