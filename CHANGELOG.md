@@ -14,6 +14,15 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ---
 
+## [0.6.16] - 2026-10-28
+
+### Fixed
+- **CLI Standard Output & Smoke Test Pipe Compatibility**:
+  - Restored console subsystem (`console=True`) in PyInstaller spec so CLI flags (`--version`, `--help`, `--self-test`) write directly to standard output and shell pipes (`$("$EXE" --version)`), resolving CI smoke test failures.
+  - Maintained runtime Windows console hiding (`ShowWindow(hwnd, 0)`) so launching the desktop application directly hides the console window without a floating terminal lingering on screen.
+
+---
+
 ## [0.6.15] - 2026-10-28
 
 ### Fixed
