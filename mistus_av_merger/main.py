@@ -12,30 +12,14 @@ import threading
 import time
 import webbrowser
 
-# PyInstaller / GUI windowed safety
-if sys.stdout is None:
-    sys.stdout = open(os.devnull, "w", encoding="utf-8")
-if sys.stderr is None:
-    sys.stderr = open(os.devnull, "w", encoding="utf-8")
-
-
 def _configure_windows_console():
-    """Hides the terminal window on Windows unless explicit CLI flags are provided."""
+    """Hides the terminal window on Windows when running as a desktop app without CLI flags."""
     if sys.platform != "win32":
         return
     try:
-        import ctypes
         is_cli = any(arg in sys.argv for arg in ("--version", "--help", "-h", "--self-test", "--console"))
-        if is_cli:
-            # Attach to caller console if invoked from cmd/powershell/bash
-            if ctypes.windll.kernel32.AttachConsole(-1):
-                try:
-                    sys.stdout = open("CONOUT$", "w", encoding="utf-8")
-                    sys.stderr = open("CONOUT$", "w", encoding="utf-8")
-                except Exception:
-                    pass
-        else:
-            # Hide the console window so no floating terminal window stays on screen
+        if not is_cli:
+            import ctypes
             hwnd = ctypes.windll.kernel32.GetConsoleWindow()
             if hwnd:
                 ctypes.windll.user32.ShowWindow(hwnd, 0)  # 0 = SW_HIDE
