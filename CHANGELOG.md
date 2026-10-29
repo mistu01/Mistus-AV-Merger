@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ## [Unreleased]
 
+### Planned
+- (nothing yet)
+
+---
+
+## [0.6.18] - 2026-10-29
+
 ### Fixed
 - **Same-Folder Scanning & Pairing**: Fixed an issue where scanning media when audio and video files reside in the same folder (either via "Audio & video in the same folder" checkbox or setting both folder paths to the same directory) caused video clips to be discarded (`scannedVideo = []`), resulting in 0 pairs and preventing queue starts.
 - **Single Video Loop in Order 1:1 Mode**: When a single video clip is present alongside multiple audio tracks in `order_1_to_1` mode, the engine now loops that clip across all audio tracks instead of stranding remaining tracks as unmatched.
