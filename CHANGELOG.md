@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ## [Unreleased]
 
+### Planned
+- (nothing yet)
+
+---
+
+## [0.6.19] - 2026-10-29
+
 ### Fixed
 - **Queue Remaining & Queue All Execution**:
   - Fixed an issue where clicking "Queue Remaining" failed to queue scanned items due to missing output directory paths defaulting to root, unhandled asynchronous network requests, and hardcoded `skip_existing: true`.
