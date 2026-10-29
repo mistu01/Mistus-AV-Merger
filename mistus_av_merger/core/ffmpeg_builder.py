@@ -176,11 +176,13 @@ class FFmpegCommandBuilder:
                 f"noise=alls={noise_val}:allf=t+u"
             )
 
-        # 4. Noise and static synthesis
-        # NOTE: 'seed' option was removed from vf_noise in newer FFmpeg;
-        # the channel-level 'all_seed' is the supported alias.
-        if noise_static and "noise=" not in filtergraph:
-            vfilters.append(f"noise=alls=35:allf=t+u:all_seed={noise_seed}")
+        # 4. Noise and static synthesis:
+        # Periodic tape static burst with tracking tear glitch every 4.5s
+        if noise_static:
+            vfilters.append(
+                f"noise=alls=65:allf=t+u:all_seed={noise_seed}:enable='lt(mod(t\\,4.5)\\,0.35)',"
+                f"drawbox=y=ih-42:color=white@0.70:width=iw:height=4:t=fill:enable='lt(mod(t\\,4.5)\\,0.35)'"
+            )
 
         # Combine video filters
         vf_string = ",".join(vfilters) if vfilters else "null"
@@ -333,8 +335,11 @@ class FFmpegCommandBuilder:
                 f"noise=alls={noise_val}:allf=t+u"
             )
 
-        if noise_static and "noise=" not in filtergraph:
-            vfilters.append(f"noise=alls=35:allf=t+u:all_seed={noise_seed}")
+        if noise_static:
+            vfilters.append(
+                f"noise=alls=65:allf=t+u:all_seed={noise_seed}:enable='lt(mod(t\\,4.5)\\,0.35)',"
+                f"drawbox=y=ih-42:color=white@0.70:width=iw:height=4:t=fill:enable='lt(mod(t\\,4.5)\\,0.35)'"
+            )
 
         vf_string = ",".join(vfilters) if vfilters else "null"
 

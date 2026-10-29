@@ -148,40 +148,77 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
 
       // 2. Chromatic aberration / Color Shift (VHS)
       if (activePreset.chromaShift) {
-        const shiftX = Math.sin(frame * 0.1) * 3;
+        const shiftX = Math.sin(frame * 0.12) * (activePreset.id === 'heavy_degradation' ? 5 : 3.5);
         ctx.save();
         ctx.globalCompositeOperation = 'screen';
-        ctx.fillStyle = 'rgba(255, 0, 50, 0.15)';
+        ctx.fillStyle = 'rgba(255, 0, 50, 0.22)';
         ctx.fillRect(shiftX, 0, w, h);
-        ctx.fillStyle = 'rgba(0, 200, 255, 0.15)';
+        ctx.fillStyle = 'rgba(0, 220, 255, 0.22)';
         ctx.fillRect(-shiftX, 0, w, h);
         ctx.restore();
       }
 
-      // 3. Scanlines
+      // 3. Scanlines (CRT raster)
       if (activePreset.scanlines) {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+        ctx.fillStyle = activePreset.id === 'security_cam' ? 'rgba(0, 0, 0, 0.40)' : 'rgba(0, 0, 0, 0.28)';
         for (let y = 0; y < h; y += 3) {
           ctx.fillRect(0, y, w, 1);
         }
       }
 
-      // 4. Tracking noise band (bottom head-switching glitch)
-      if (activePreset.trackingNoise || (staticBursts && frame % 45 < 6)) {
-        const bandY = h - 24 + Math.sin(frame * 0.2) * 4;
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
-        ctx.fillRect(0, bandY, w, 16);
+      // 4. Tracking noise band & static burst (bottom head-switching glitch + periodic static bursts)
+      const isBurst = staticBursts && (frame % 60 < 8);
+      if (activePreset.trackingNoise || isBurst) {
+        const bandH = isBurst ? 32 : 22;
+        const bandY = h - bandH - 4 + Math.sin(frame * 0.25) * 4;
+        ctx.fillStyle = isBurst ? 'rgba(255, 255, 255, 0.55)' : 'rgba(255, 255, 255, 0.30)';
+        ctx.fillRect(0, bandY, w, bandH);
         // Add random snow inside band
-        const imgData = ctx.getImageData(0, Math.floor(bandY), w, 16);
+        const imgData = ctx.getImageData(0, Math.max(0, Math.floor(bandY)), w, Math.min(bandH, h - Math.floor(bandY)));
         for (let i = 0; i < imgData.data.length; i += 4) {
-          if (Math.random() > 0.4) {
+          if (Math.random() > 0.3) {
             const val = Math.random() * 255;
             imgData.data[i] = val;
             imgData.data[i + 1] = val;
             imgData.data[i + 2] = val;
           }
         }
-        ctx.putImageData(imgData, 0, Math.floor(bandY));
+        ctx.putImageData(imgData, 0, Math.max(0, Math.floor(bandY)));
+
+        // White sync jitter tear lines
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+        ctx.fillRect(0, bandY - 3, w, 2);
+        if (isBurst) {
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.60)';
+          ctx.fillRect(0, bandY - 8, w, 1);
+        }
+      }
+
+      // 4b. Security Cam (CCTV) phosphor green monitor and surveillance OSD
+      if (activePreset.id === 'security_cam') {
+        ctx.save();
+        ctx.globalCompositeOperation = 'color';
+        ctx.fillStyle = 'rgba(60, 150, 75, 0.85)';
+        ctx.fillRect(0, 0, w, h);
+        ctx.restore();
+
+        // Surveillance vignette
+        const cctvVig = ctx.createRadialGradient(w / 2, h / 2, w * 0.20, w / 2, h / 2, w * 0.60);
+        cctvVig.addColorStop(0, 'rgba(0,0,0,0)');
+        cctvVig.addColorStop(1, 'rgba(0,0,0,0.65)');
+        ctx.fillStyle = cctvVig;
+        ctx.fillRect(0, 0, w, h);
+
+        // CCTV OSD (Rec indicator, camera label, timestamp)
+        ctx.font = 'bold 10px monospace';
+        ctx.fillStyle = (frame % 30 < 15) ? '#ef4444' : '#7f1d1d';
+        ctx.beginPath();
+        ctx.arc(14, 16, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#4ade80';
+        ctx.fillText('REC  CAM-04 [SECURITY SECTOR B]', 24, 20);
+        ctx.fillText('12 FPS CCTV', w - 90, 20);
       }
 
       // 5. Film grain / static noise
@@ -432,7 +469,7 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
               {resolution !== 'original' && `scale=${resolution === '1080p' ? '1920:1080' : resolution === '720p' ? '1280:720' : '854:480'}:force_original_aspect_ratio=decrease,pad=${resolution === '1080p' ? '1920:1080' : resolution === '720p' ? '1280:720' : '854:480'}:(ow-iw)/2:(oh-ih)/2,`}
               {activePreset.filtergraph || (!hasEffects ? 'No filter — stream copy enabled (-c:v copy)' : '')}
               {nightMode && `${activePreset.filtergraph ? ',' : ''}eq=contrast=${(1.05 + 0.25 * nightIntensity).toFixed(2)}:brightness=${(-0.04 - 0.22 * nightIntensity).toFixed(2)}:saturation=${Math.max(0.15, 1.0 - 0.75 * nightIntensity).toFixed(2)}:gamma=${Math.max(0.45, 1.0 - 0.45 * nightIntensity).toFixed(2)},vignette=PI/3.5*${(0.20 + 0.80 * nightIntensity).toFixed(2)},noise=${Math.round(8 + 14 * nightIntensity)}`}
-              {staticBursts && `${(activePreset.filtergraph || nightMode) ? ',' : ''}noise=alls=35:allf=t+u:all_seed=${noiseSeed}`}
+              {staticBursts && `${(activePreset.filtergraph || nightMode) ? ',' : ''}noise=alls=65:allf=t+u:all_seed=${noiseSeed}:enable=\'lt(mod(t,4.5),0.35)\',drawbox=y=ih-42:color=white@0.70:width=iw:height=4:t=fill:enable=\'lt(mod(t,4.5),0.35)\'`}
               {overlayEnabled && (overlayAnimation === 'bounce'
                 ? `${(activePreset.filtergraph || nightMode || staticBursts) ? ',' : ''}[1:v]scale=rw*0.40:-1[ov];[0:v][ov]overlay=x='(W-w)-abs(mod(0.15*W*t,2*(W-w))-(W-w))':y='(H-h)-abs(mod(0.11*H*t,2*(H-h))-(H-h))'${overlayTimeout !== 'full' ? `:enable='lte(t,${overlayTimeout})'` : ''}`
                 : `${(activePreset.filtergraph || nightMode || staticBursts) ? ',' : ''}[1:v]scale=iw:ih[ov];[0:v][ov]overlay=0:0${overlayTimeout !== 'full' ? `:enable='lte(t,${overlayTimeout})'` : ''}`)}

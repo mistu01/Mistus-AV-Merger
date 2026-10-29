@@ -9,8 +9,19 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ## [Unreleased]
 
-### Planned
-- (nothing yet)
+### Improved
+- **Authentic VHS & Surveillance Camera Aesthetic Effects**:
+  - **Dynamic Periodic Static Bursts**: Fixed an issue where enabling "Periodic Tape Static Bursts" (`noise_static`) was bypassed whenever a preset already had base noise. Upgraded the static burst generator to inject realistic periodic magnetic static bursts with horizontal tracking tear glitches (`noise=alls=65:allf=t+u:enable='lt(mod(t\,4.5)\,0.35)',drawbox=y=ih-42:color=white@0.70:width=iw:height=4:t=fill:enable='lt(mod(t\,4.5)\,0.35)'`), delivering surreal, tactile tape tracking spikes every 4.5 seconds.
+  - **Authentic CCTV Surveillance Footage**: Re-engineered `security_cam` with true CCTV multiplexer motion cadence (`fps=12`), phosphor green surveillance sensor curves, high-contrast shadow clipping (`eq=contrast=1.85:brightness=-0.07`), distinct CRT monitor raster scanlines (`drawgrid=width=iw:height=4:thickness=1:color=black@0.48`), wide-angle fisheye lens vignette (`vignette=PI/2.8`), and chunky low-light CCD static (`noise=alls=48:allf=t+u`).
+  - **Intensified VHS Tape Presets & CRT Scanlines**:
+    - `clean_vhs`: Added horizontal 240-line tape softening, composite chroma phase delay (`chromashift=cbh=8:crh=-8`), bottom head-switching bar, CRT scanlines, and vintage tape warmth.
+    - `worn_tape`: Upgraded to heavy LP mode wear with distinct CRT scanlines, bottom head-switching glitch bar with white sync tear, magnetic snow (`noise=alls=38`), and analog saturation.
+    - `tracking_errors`: Amplified severe tracking misalignment with double sync tearing jitter lines, thick head-switching band, CRT raster lines, and intense static snow (`noise=alls=54`).
+    - `chroma_bleed`: Boosted RCA composite analog cable color displacement, horizontal softening, and saturated color halos.
+    - `camcorder_90s`: Added 90s incandescent warm tungsten balance, CRT interlace lines, lens chroma drift, and camcorder sensor noise.
+    - `heavy_degradation`: Maximum analog generation loss and tape decay with extreme horizontal blur (`sizeX=9:sizeY=2`), massive color offset, dense scanlines, huge bottom head-switching tear, and heavy static snow storm (`noise=alls=68`).
+  - **Studio Canvas & Filtergraph Simulation**:
+    - Updated Visual Effects Studio canvas simulation to render authentic CRT scanlines, dynamic static burst spikes with white sync tear jitter, and CCTV surveillance green phosphor tint with OSD camera status overlay.
 
 ---
 
