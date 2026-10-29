@@ -100,7 +100,33 @@ class MediaScanner:
 
             data = json.loads(res.stdout.decode("utf-8", errors="replace"))
             fmt = data.get("format", {})
-            duration = float(fmt.get("duration", 0.0))
+            duration = 0.0
+            raw_dur = fmt.get("duration")
+            if raw_dur and raw_dur != "N/A":
+                try:
+                    duration = float(raw_dur)
+                except (ValueError, TypeError):
+                    duration = 0.0
+
+            if duration <= 0.0:
+                for stream in data.get("streams", []):
+                    s_dur = stream.get("duration")
+                    if s_dur and s_dur != "N/A":
+                        try:
+                            val = float(s_dur)
+                            if val > duration:
+                                duration = val
+                        except (ValueError, TypeError):
+                            pass
+                    t_dur = stream.get("tags", {}).get("DURATION")
+                    if t_dur and duration <= 0.0:
+                        try:
+                            parts = str(t_dur).split(":")
+                            if len(parts) == 3:
+                                duration = float(parts[0]) * 3600 + float(parts[1]) * 60 + float(parts[2])
+                        except Exception:
+                            pass
+
             format_name = fmt.get("format_name", "")
             size_bytes = int(fmt.get("size", stat.st_size))
 

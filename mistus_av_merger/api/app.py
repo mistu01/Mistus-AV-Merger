@@ -497,15 +497,15 @@ class QueueAddRequest(BaseModel):
 def _resolve_job_overlay(raw: Dict[str, Any], options: Dict[str, Any], mode: str) -> tuple[str, str]:
     """Resolves the concrete overlay image for one job.
 
-    Two sources: an explicit `overlayPath` (single mode pick) or an
-    `overlay_folder` (bulk mode) from which ONE image is drawn at random for
+    Two sources: an explicit `overlayPath` (single mode pick or universal fallback)
+    or an `overlay_folder` (bulk mode) from which ONE image is drawn at random for
     this specific job. Returns (resolved_path_or_empty, adjusted_mode).
     """
     if not options.get("overlayEnabled"):
         return "", mode
 
-    overlay_path = str(options.get("overlayPath") or "").strip()
-    overlay_folder = str(raw.get("overlay_folder") or options.get("overlayFolder") or "").strip()
+    overlay_path = str(options.get("overlayPath") or "").strip().strip('"\'')
+    overlay_folder = str(raw.get("overlay_folder") or options.get("overlayFolder") or "").strip().strip('"\'')
 
     if overlay_folder:
         folder = Path(overlay_folder)
@@ -518,10 +518,9 @@ def _resolve_job_overlay(raw: Dict[str, Any], options: Dict[str, Any], mode: str
                 overlay_path = str(random.choice(images))
 
     if overlay_path:
-        if Path(overlay_path).exists():
-            if mode == "copy":
-                # Stream copy cannot burn an overlay; force a re-encode.
-                mode = "encode"
+        p = Path(overlay_path)
+        if p.exists() and p.is_file():
+            mode = "encode"
         else:
             overlay_path = ""
     return overlay_path, mode
@@ -531,42 +530,9 @@ def _resolve_job_overlay(raw: Dict[str, Any], options: Dict[str, Any], mode: str
 def add_jobs(req: QueueAddRequest):
     added = []
     for raw in req.jobs:
-        audio_path = Path(str(raw.get("audio_path", "")))
-        video_path = Path(str(raw.get("video_path", "")))
-        output_path = Path(str(raw.get("output_path", "")))
-
-        # 1. Carefully skip if output file already exists on disk and is complete
-        audio_dur_pre = raw.get("duration")
-        if not audio_dur_pre and audio_path.exists():
-            audio_dur_pre = _pick_probe_duration(audio_path) or 0.0
-
-        if req.skip_existing and output_path.exists() and is_output_file_complete(output_path, float(audio_dur_pre or 0.0), scanner.ffprobe_bin):
-            continue
-
-        # 2. Prevent duplicate active jobs if already tracked in queue
-        existing = next(
-            (j for j in queue_mgr.jobs if j.output_path == str(output_path)),
-            None
-        )
-        if existing:
-            if existing.status == "queued":
-                existing.mode = str(raw.get("mode") or existing.mode)
-                existing.mode_reason = str(raw.get("mode_reason") or existing.mode_reason)
-                added.append(existing.to_dict())
-                continue
-            elif existing.status in ("failed", "completed"):
-                existing.status = "queued"
-                existing.progress = 0.0
-                existing.logs.append("[info] Re-queued by user.")
-                added.append(existing.to_dict())
-                continue
-            elif existing.status == "rendering":
-                continue
-
-        if not audio_path.exists():
-            raise HTTPException(status_code=400, detail=f"Audio file not found: {audio_path}")
-        if not video_path.exists():
-            raise HTTPException(status_code=400, detail=f"Video file not found: {video_path}")
+        audio_path = Path(str(raw.get("audio_path", "")).strip().strip('"\''))
+        video_path = Path(str(raw.get("video_path", "")).strip().strip('"\''))
+        output_path = Path(str(raw.get("output_path", "")).strip().strip('"\''))
 
         # Guard against empty/root output_path
         if not output_path.parent or str(output_path.parent) in ("\\", "/", "."):
@@ -576,6 +542,20 @@ def add_jobs(req: QueueAddRequest):
             output_path.parent.mkdir(parents=True, exist_ok=True)
         except OSError as e:
             raise HTTPException(status_code=400, detail=f"Cannot create output folder: {e}")
+
+        # Durations
+        audio_dur = raw.get("duration")
+        if not audio_dur and audio_path.exists():
+            audio_dur = _pick_probe_duration(audio_path) or 0.0
+        audio_dur = float(audio_dur or 0.0)
+
+        # 1. Carefully skip if output file already exists on disk and is complete
+        if req.skip_existing and output_path.exists() and is_output_file_complete(output_path, audio_dur, scanner.ffprobe_bin):
+            continue
+
+        video_dur = 0.0
+        if video_path.exists():
+            video_dur = _pick_probe_duration(video_path) or 0.0
 
         mode = str(raw.get("mode") or "copy")
         mode_reason = str(raw.get("mode_reason") or "")
@@ -591,23 +571,52 @@ def add_jobs(req: QueueAddRequest):
             or (options.get("vhsPreset") and options.get("vhsPreset") not in ("none", "off"))
             or options.get("nightModeEnabled")
             or options.get("noiseStaticEnabled")
-            or (options.get("overlayEnabled") and (options.get("overlayPath") or raw.get("overlay_folder")))
+            or (options.get("overlayEnabled") and (options.get("overlayPath") or raw.get("overlay_folder") or options.get("overlayFolder")))
         )
         if has_effects:
             mode = "encode"
-            mode_reason = "Visual effects / overlay active (re-encode required)" 
-
-        audio_dur = raw.get("duration")
-        if not audio_dur:
-            probed = _pick_probe_duration(audio_path)
-            audio_dur = probed or 0.0
-        video_dur = _pick_probe_duration(video_path) or 0.0
+            mode_reason = "Visual effects / overlay active (re-encode required)"
 
         if mode == "encode":
-            _apply_size_tier(options, float(audio_dur))
+            _apply_size_tier(options, audio_dur)
         else:
             options.pop("videoBitrateKbps", None)
             options.pop("audioBitrateKbps", None)
+
+        job_options = {**options, "video_duration_sec": video_dur}
+
+        # 2. Prevent duplicate active jobs if already tracked in queue, updating options
+        existing = next(
+            (j for j in queue_mgr.jobs if j.output_path == str(output_path)),
+            None
+        )
+        if existing:
+            if existing.status == "queued":
+                existing.mode = mode
+                existing.mode_reason = mode_reason
+                existing.options = job_options
+                existing.duration = audio_dur
+                added.append(existing.to_dict())
+                queue_mgr.save_session()
+                continue
+            elif existing.status in ("failed", "completed"):
+                existing.status = "queued"
+                existing.progress = 0.0
+                existing.mode = mode
+                existing.mode_reason = mode_reason
+                existing.options = job_options
+                existing.duration = audio_dur
+                existing.logs.append("[info] Re-queued by user with updated options.")
+                added.append(existing.to_dict())
+                queue_mgr.save_session()
+                continue
+            elif existing.status == "rendering":
+                continue
+
+        if not audio_path.exists():
+            raise HTTPException(status_code=400, detail=f"Audio file not found: {audio_path}")
+        if not video_path.exists():
+            raise HTTPException(status_code=400, detail=f"Video file not found: {video_path}")
 
         job = RenderJob(
             job_id=f"job_{uuid.uuid4().hex[:12]}",
@@ -616,8 +625,8 @@ def add_jobs(req: QueueAddRequest):
             output_path=str(output_path),
             mode=mode,
             mode_reason=mode_reason,
-            duration=float(audio_dur),
-            options={**options, "video_duration_sec": video_dur},
+            duration=audio_dur,
+            options=job_options,
         )
         job.total_segments = 1
         queue_mgr.add_job(job)
@@ -656,6 +665,17 @@ def _execute_job(job: RenderJob):
 
         job_threads = int(opts.get("threads") or 0) or queue_mgr.threads_for_profile()
         if job.mode == "encode":
+            # Runtime resolution for overlay if enabled but path was not pre-resolved
+            if opts.get("overlayEnabled") and not opts.get("overlayPath"):
+                f_str = str(opts.get("overlayFolder") or "").strip().strip('"\'')
+                if f_str:
+                    folder = Path(f_str)
+                    if folder.is_dir():
+                        imgs = sorted(p for p in folder.iterdir() if p.suffix.lower() in _IMAGE_EXTS and p.is_file())
+                        if imgs:
+                            opts["overlayPath"] = str(random.choice(imgs))
+                            job.options["overlayPath"] = opts["overlayPath"]
+
             preset = preset_mgr.get_preset(str(opts.get("vhsPreset") or "none"))
             filtergraph = preset["filtergraph"] if preset else ""
             noise_static = bool(opts.get("noiseStaticEnabled"))
@@ -764,6 +784,7 @@ def _execute_job(job: RenderJob):
                             noise_static=noise_static,
                             noise_seed=int(opts.get("noiseSeed") or 1994),
                             overlay_path=None,  # No overlay in Segment B!
+                            loop_input=(video_dur < clean_loop_dur),
                             duration_sec=clean_loop_dur,
                             bitrate_kbps=int(opts["videoBitrateKbps"]) if opts.get("videoBitrateKbps") else None,
                             threads=job_threads,

@@ -9,8 +9,15 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ## [Unreleased]
 
-### Planned
-- (nothing yet)
+### Fixed
+- **Visual Effects & Image Overlay Propagation**:
+  - Fixed an issue where re-queuing or adding jobs after tweaking visual effects or overlay settings failed to update existing jobs in the queue, causing them to render with stale options and bypass effects.
+  - Fixed single-image overlays being wiped out when bulk-queuing (`buildQueuePayload` was nullifying `overlayPath` if an overlay folder was present in state). Single-image overlays now cleanly apply across bulk renders if no separate bulk image folder is provided.
+  - Fixed bulk overlay folder "Clear" button in Visual Effects Studio failing to clear state in `App.tsx`, which prevented users from resetting their bulk folder.
+  - Added full `localStorage` persistence for `renderOptions` so VHS presets, night mode, noise settings, overlay opacity, timeouts, and animation styles persist across application reloads.
+  - Fixed duration parsing in `scanner.py` to gracefully handle `"N/A"` or container-level null values by checking individual video/audio streams and `DURATION` tags.
+  - Added robust string path normalization in `FFmpegCommandBuilder` and `app.py` to handle paths wrapped in quotes.
+  - Fixed clean loop generation in timed overlay fast loop pipeline by ensuring `loop_input=(video_dur < clean_loop_dur)` is passed.
 
 ---
 

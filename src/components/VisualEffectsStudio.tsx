@@ -27,6 +27,8 @@ interface VisualEffectsStudioProps {
   renderOptions: RenderOptions;
   setRenderOptions: React.Dispatch<React.SetStateAction<RenderOptions>>;
   overlayImageFolder?: string;
+  onClearSingleOverlay?: () => void;
+  onClearOverlayFolder?: () => void;
   onOpenBrowser?: (target: 'single_image' | 'bulk_images') => void;
   onNavigateToTab?: (tab: 'single' | 'bulk' | 'queue') => void;
 }
@@ -35,6 +37,8 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
   renderOptions,
   setRenderOptions,
   overlayImageFolder = '',
+  onClearSingleOverlay,
+  onClearOverlayFolder,
   onOpenBrowser,
   onNavigateToTab,
 }) => {
@@ -63,8 +67,9 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
   const singleOverlayName = renderOptions.overlayPath
     ? renderOptions.overlayPath.split(/[/\\]/).pop() || renderOptions.overlayPath
     : '';
-  const bulkOverlayFolderName = overlayImageFolder
-    ? overlayImageFolder.split(/[/\\]/).pop() || overlayImageFolder
+  const effectiveBulkFolder = renderOptions.overlayFolder || overlayImageFolder;
+  const bulkOverlayFolderName = effectiveBulkFolder
+    ? effectiveBulkFolder.split(/[/\\]/).pop() || effectiveBulkFolder
     : '';
 
   // Has effects flag
@@ -527,7 +532,10 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
                       <span>Single Mode Image</span>
                       {renderOptions.overlayPath && (
                         <button
-                          onClick={() => setRenderOptions(prev => ({ ...prev, overlayPath: undefined }))}
+                          onClick={() => {
+                            if (onClearSingleOverlay) onClearSingleOverlay();
+                            else setRenderOptions(prev => ({ ...prev, overlayPath: undefined }));
+                          }}
                           className="text-[10px] text-red-600 hover:underline flex items-center gap-0.5"
                         >
                           <X className="w-3 h-3" /> Clear
@@ -554,9 +562,12 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
                   <div className="space-y-2">
                     <span className="nb-label flex items-center justify-between">
                       <span>Bulk Mode Folder</span>
-                      {overlayImageFolder && (
+                      {effectiveBulkFolder && (
                         <button
-                          onClick={() => setRenderOptions(prev => ({ ...prev, overlayFolder: undefined }))}
+                          onClick={() => {
+                            if (onClearOverlayFolder) onClearOverlayFolder();
+                            else setRenderOptions(prev => ({ ...prev, overlayFolder: undefined }));
+                          }}
                           className="text-[10px] text-red-600 hover:underline flex items-center gap-0.5"
                         >
                           <X className="w-3 h-3" /> Clear
@@ -564,7 +575,7 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
                       )}
                     </span>
                     <div className="flex gap-2">
-                      <div className="nb-inset flex-1 px-3 py-2 text-[11px] font-mono font-bold truncate bg-white" title={overlayImageFolder || 'No folder picked'}>
+                      <div className="nb-inset flex-1 px-3 py-2 text-[11px] font-mono font-bold truncate bg-white" title={effectiveBulkFolder || 'No folder picked'}>
                         {bulkOverlayFolderName || 'No folder picked'}
                       </div>
                       {onOpenBrowser && (

@@ -132,8 +132,9 @@ class FFmpegCommandBuilder:
             "-i", str(audio_path),
         ]
 
-        if overlay_path and overlay_path.exists():
-            cmd.extend(["-i", str(overlay_path)])
+        overlay_p = Path(str(overlay_path).strip('"\'')) if overlay_path else None
+        if overlay_p and overlay_p.exists() and overlay_p.is_file():
+            cmd.extend(["-i", str(overlay_p)])
 
         if start_time_sec is not None:
             cmd.extend(["-ss", f"{start_time_sec:.3f}"])
@@ -174,7 +175,7 @@ class FFmpegCommandBuilder:
 
         # If overlay exists, composite with the requested opacity.
         # Supports full-frame static stretch or bouncing VCD / DVD logo motion.
-        if overlay_path and overlay_path.exists():
+        if overlay_p and overlay_p.exists() and overlay_p.is_file():
             enable_clause = ""
             if overlay_timeout is not None:
                 str_timeout = str(overlay_timeout).strip().lower()
@@ -285,8 +286,9 @@ class FFmpegCommandBuilder:
             cmd.extend(["-stream_loop", "-1"])
         cmd.extend(["-i", str(video_path)])
 
-        if overlay_path and overlay_path.exists():
-            cmd.extend(["-i", str(overlay_path)])
+        overlay_p = Path(str(overlay_path).strip('"\'')) if overlay_path else None
+        if overlay_p and overlay_p.exists() and overlay_p.is_file():
+            cmd.extend(["-i", str(overlay_p)])
 
         if duration_sec is not None:
             cmd.extend(["-t", f"{duration_sec:.3f}"])
@@ -312,7 +314,7 @@ class FFmpegCommandBuilder:
 
         vf_string = ",".join(vfilters) if vfilters else "null"
 
-        if overlay_path and overlay_path.exists():
+        if overlay_p and overlay_p.exists() and overlay_p.is_file():
             if str(overlay_animation).lower() in ("bounce", "vcd", "animated"):
                 vf_string = (
                     f"[0:v]{vf_string}[base];"

@@ -62,20 +62,32 @@ export default function App() {
   const [concurrency, setConcurrency] = useState(1);
   const [segmentDuration, setSegmentDuration] = useState(120);
 
-  // Render options
-  const [renderOptions, setRenderOptions] = useState<RenderOptions>({
-    resolution: 'original',
-    vhsPreset: 'none',
-    nightModeEnabled: false,
-    nightIntensity: 0.7,
-    noiseStaticEnabled: false,
-    noiseSeed: 1994,
-    overlayEnabled: false,
-    overlayOpacity: 0.8,
-    overlayTimeout: 'full',
-    overlayAnimation: 'static',
-    sizeTarget: 'balanced',
+  // Render options with localStorage persistence
+  const [renderOptions, setRenderOptions] = useState<RenderOptions>(() => {
+    try {
+      const saved = localStorage.getItem('mistus_render_options');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return {
+      resolution: 'original',
+      vhsPreset: 'none',
+      nightModeEnabled: false,
+      nightIntensity: 0.7,
+      noiseStaticEnabled: false,
+      noiseSeed: 1994,
+      overlayEnabled: false,
+      overlayOpacity: 0.8,
+      overlayTimeout: 'full',
+      overlayAnimation: 'static',
+      sizeTarget: 'balanced',
+    };
   });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('mistus_render_options', JSON.stringify(renderOptions));
+    } catch {}
+  }, [renderOptions]);
 
   // Jobs Queue — starts empty; entries are added by the user
   const [jobs, setJobs] = useState<RenderJob[]>([]);
@@ -329,6 +341,17 @@ export default function App() {
     });
   };
 
+  const handleClearSingleOverlay = () => {
+    setRenderOptions(prev => ({ ...prev, overlayPath: undefined }));
+    updateSettings({ last_single_overlay: '' });
+  };
+
+  const handleClearBulkOverlayFolder = () => {
+    setOverlayImageFolder('');
+    setRenderOptions(prev => ({ ...prev, overlayFolder: undefined }));
+    updateSettings({ last_overlay_folder: '' });
+  };
+
   // Spawn payload row sent to the backend queue
   const buildQueuePayload = (
     audio: MediaProbe,
@@ -339,12 +362,13 @@ export default function App() {
     overlayFolder?: string,
     explicitOutputDir?: string,
   ) => {
+    const bulkFolder = overlayFolder || renderOptions.overlayFolder || overlayImageFolder;
     const hasEffects = Boolean(
       (renderOptions.resolution && renderOptions.resolution !== 'original') ||
       (renderOptions.vhsPreset && renderOptions.vhsPreset !== 'none' && renderOptions.vhsPreset !== 'off') ||
       renderOptions.nightModeEnabled ||
       renderOptions.noiseStaticEnabled ||
-      (renderOptions.overlayEnabled && (renderOptions.overlayPath || overlayFolder || renderOptions.overlayFolder))
+      (renderOptions.overlayEnabled && (renderOptions.overlayPath || bulkFolder))
     );
     const effectiveMode = hasEffects ? 'encode' : mode;
     const effectiveReason = hasEffects ? 'Visual effects active (re-encode required)' : modeReason;
@@ -359,10 +383,10 @@ export default function App() {
       mode: effectiveMode,
       mode_reason: effectiveReason,
       duration: audio.duration,
-      ...(overlayFolder ? { overlay_folder: overlayFolder } : {}),
+      ...(bulkFolder ? { overlay_folder: bulkFolder } : {}),
       options: {
         ...renderOptions,
-        ...(overlayFolder ? { overlayFolder, overlayPath: undefined } : {}),
+        ...(bulkFolder ? { overlayFolder: bulkFolder } : {}),
       },
     };
   };
@@ -410,7 +434,7 @@ export default function App() {
   const handleQueueBatch = async (pairings: PairingResult[]) => {
     if (!pairings || pairings.length === 0) return;
     try {
-      const folder = renderOptions.overlayEnabled ? overlayImageFolder : '';
+      const folder = renderOptions.overlayEnabled ? (renderOptions.overlayFolder || overlayImageFolder) : '';
       const targetOut = outputFolder || (audioFolder ? `${audioFolder.replace(/[\\/]+$/, '')}/MistusRenders` : '');
       const payload = pairings.map(p => {
         const outDir = targetOut || p.audio.path.replace(/[\\/][^\\/]+$/, '') + '/MistusRenders';
@@ -558,6 +582,8 @@ export default function App() {
             renderOptions={renderOptions}
             setRenderOptions={setRenderOptions}
             overlayImageFolder={overlayImageFolder}
+            onClearSingleOverlay={handleClearSingleOverlay}
+            onClearOverlayFolder={handleClearBulkOverlayFolder}
             onOpenBrowser={target => {
               if (target === 'single_image') {
                 openBrowser('single_image', 'Pick An Overlay Image (.jpg, .png, .webp)');

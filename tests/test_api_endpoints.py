@@ -48,3 +48,58 @@ def test_queue_clear_endpoint():
     res = clear_all_jobs()
     assert res["status"] == "cleared"
     assert len(queue_mgr.jobs) == 0
+
+
+def test_queue_add_updates_existing_job_options(tmp_path):
+    clear_all_jobs()
+    audio = tmp_path / "track.mp3"
+    audio.write_bytes(b"\x00" * 100)
+    video = tmp_path / "background.mp4"
+    video.write_bytes(b"\x00" * 100)
+    out = tmp_path / "out_updated.mp4"
+    img = tmp_path / "logo.png"
+    img.write_bytes(b"\x00" * 100)
+
+    # 1. Add job with default copy mode and no effects
+    res1 = add_jobs(QueueAddRequest(
+        jobs=[{
+            "audio_path": str(audio),
+            "video_path": str(video),
+            "output_path": str(out),
+            "mode": "copy",
+            "duration": 60.0,
+            "options": {"vhsPreset": "none", "overlayEnabled": False},
+        }],
+        auto_start=False,
+    ))
+    assert len(res1["added"]) == 1
+    job = queue_mgr.jobs[0]
+    assert job.mode == "copy"
+    assert job.options.get("vhsPreset") == "none"
+    assert "overlayPath" not in job.options
+
+    # 2. User modifies Render Options (enables VHS preset & image overlay) and re-adds to queue
+    res2 = add_jobs(QueueAddRequest(
+        jobs=[{
+            "audio_path": str(audio),
+            "video_path": str(video),
+            "output_path": str(out),
+            "mode": "copy",
+            "duration": 60.0,
+            "options": {
+                "vhsPreset": "clean_vhs",
+                "overlayEnabled": True,
+                "overlayPath": str(img),
+                "overlayAnimation": "bounce",
+            },
+        }],
+        auto_start=False,
+    ))
+    # Must update existing job in place
+    assert len(res2["added"]) == 1
+    assert len(queue_mgr.jobs) == 1
+    updated_job = queue_mgr.jobs[0]
+    assert updated_job.mode == "encode"
+    assert updated_job.options.get("vhsPreset") == "clean_vhs"
+    assert updated_job.options.get("overlayPath") == str(img)
+    assert updated_job.options.get("overlayAnimation") == "bounce"
