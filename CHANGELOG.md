@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ## [Unreleased]
 
+### Planned
+- (nothing yet)
+
+---
+
+## [0.6.21] - 2026-10-29
+
 ### Improved
 - **Intensified Visual Effects & Absolute Darkness Night Mode**:
   - **Atmospheric Night Mode**: Completely re-engineered night mode color grading to deliver pitch darkness. Scaled brightness down to -0.50, increased contrast to 1.60, crushed mid/low tones with nocturnal curves, desaturated into cold silvery blues, intensified the vignette (PI/2.35), and added subtle sensor gain noise. Average luminance drops from daylight levels (~94) down to genuine night levels (~19.7).
