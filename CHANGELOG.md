@@ -9,8 +9,17 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ## [Unreleased]
 
-### Planned
-- (nothing yet)
+### Improved
+- **Intensified Visual Effects & Absolute Darkness Night Mode**:
+  - **Atmospheric Night Mode**: Completely re-engineered night mode color grading to deliver pitch darkness. Scaled brightness down to -0.50, increased contrast to 1.60, crushed mid/low tones with nocturnal curves, desaturated into cold silvery blues, intensified the vignette (PI/2.35), and added subtle sensor gain noise. Average luminance drops from daylight levels (~94) down to genuine night levels (~19.7).
+  - **Security Cam (CCTV)**: Transformed into authentic surveillance footage featuring high-contrast surveillance monochrome, subtle CRT phosphor green tint, dark horizontal scanlines (drawgrid), wide fisheye lens vignette (PI/3.0), chunky sensor grain (noise=alls=45), and a 12 FPS surveillance frame rate.
+  - **VHS Presets Overhaul**:
+    - **Clean VHS (SP Mode)**: Added horizontal tape head softening, analog chroma shift, subtle CRT scanlines, and vintage gamma.
+    - **Worn Tape (LP Mode)**: Intensified horizontal chroma bleed, distinct CRT scanlines, bottom head-switching glitch bar, and magnetic noise.
+    - **Tracking Errors**: Implemented severe chroma split, CRT scanlines, dark head-switching band, white sync jitter lines, and heavy magnetic snow.
+    - **Chroma Bleed & Camcorder 90s**: Enhanced composite RCA color separation and 90s incandescent warmth with scanlines.
+    - **Heavy Degradation**: Pushed generation loss to the extreme with horizontal blur, massive color displacement, thick scanlines, and intense static snow.
+  - **Studio Live Preview**: Updated the interactive canvas and compiled FFmpeg filtergraph preview in Visual Effects Studio to accurately reflect the dark night mode and intense retro effects.
 
 ---
 

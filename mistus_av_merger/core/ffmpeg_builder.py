@@ -158,17 +158,24 @@ class FFmpegCommandBuilder:
         if filtergraph:
             vfilters.append(filtergraph)
 
-        # 3. Night mode grading
+        # 3. Night mode grading - calibrated for absolute darkness
         if night_mode:
+            b_val = -0.15 - (0.35 * night_intensity)
+            c_val = 1.25 + (0.35 * night_intensity)
+            sat_val = max(0.05, 0.45 - (0.35 * night_intensity))
+            vig_val = min(1.35, 0.75 + (0.55 * night_intensity))
             vfilters.append(
-                f"eq=contrast=1.12:brightness=-0.08,curves=all='0/0 0.5/0.4 1/0.95':blue='0/0 0.5/0.58 1/1',vignette=PI/4*{night_intensity:.2f}:eval=init"
+                f"eq=contrast={c_val:.2f}:brightness={b_val:.2f}:saturation={sat_val:.2f},"
+                f"curves=all='0/0 0.2/0.01 0.4/0.07 0.7/0.25 1/0.70':blue='0/0 0.3/0.10 0.6/0.40 1/0.80':red='0/0 0.5/0.10 1/0.55',"
+                f"vignette=PI/2.35*{vig_val:.2f}:eval=init,"
+                f"noise=alls=14:allf=t+u"
             )
 
         # 4. Noise and static synthesis
         # NOTE: 'seed' option was removed from vf_noise in newer FFmpeg;
         # the channel-level 'all_seed' is the supported alias.
         if noise_static and "noise=" not in filtergraph:
-            vfilters.append(f"noise=alls=18:allf=t+u:all_seed={noise_seed}")
+            vfilters.append(f"noise=alls=35:allf=t+u:all_seed={noise_seed}")
 
         # Combine video filters
         vf_string = ",".join(vfilters) if vfilters else "null"
@@ -305,12 +312,19 @@ class FFmpegCommandBuilder:
             vfilters.append(filtergraph)
 
         if night_mode:
+            b_val = -0.15 - (0.35 * night_intensity)
+            c_val = 1.25 + (0.35 * night_intensity)
+            sat_val = max(0.05, 0.45 - (0.35 * night_intensity))
+            vig_val = min(1.35, 0.75 + (0.55 * night_intensity))
             vfilters.append(
-                f"eq=contrast=1.12:brightness=-0.08,curves=all='0/0 0.5/0.4 1/0.95':blue='0/0 0.5/0.58 1/1',vignette=PI/4*{night_intensity:.2f}:eval=init"
+                f"eq=contrast={c_val:.2f}:brightness={b_val:.2f}:saturation={sat_val:.2f},"
+                f"curves=all='0/0 0.2/0.01 0.4/0.07 0.7/0.25 1/0.70':blue='0/0 0.3/0.10 0.6/0.40 1/0.80':red='0/0 0.5/0.10 1/0.55',"
+                f"vignette=PI/2.35*{vig_val:.2f}:eval=init,"
+                f"noise=alls=14:allf=t+u"
             )
 
         if noise_static and "noise=" not in filtergraph:
-            vfilters.append(f"noise=alls=16:allf=t+u:all_seed={noise_seed}")
+            vfilters.append(f"noise=alls=35:allf=t+u:all_seed={noise_seed}")
 
         vf_string = ",".join(vfilters) if vfilters else "null"
 
