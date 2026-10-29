@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ## [Unreleased]
 
+### Planned
+- (nothing yet)
+
+---
+
+## [0.6.26] - 2026-10-29
+
 ### Fixed
 - **Queue Stop, Clear & Restart Lifecycle**:
   - Fixed an issue where stopping an active render and clearing the queue could leave the render worker thread unresponsive or trying fallback encoders on dead processes.
