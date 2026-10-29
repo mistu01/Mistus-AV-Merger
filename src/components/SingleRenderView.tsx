@@ -102,7 +102,6 @@ export const SingleRenderView: React.FC<SingleRenderViewProps> = ({
     : '1.0';
 
   const hasEffects = Boolean(
-    (renderOptions.resolution && renderOptions.resolution !== 'original') ||
     (renderOptions.vhsPreset && renderOptions.vhsPreset !== 'none' && renderOptions.vhsPreset !== 'off') ||
     renderOptions.nightModeEnabled ||
     renderOptions.noiseStaticEnabled ||
@@ -136,12 +135,6 @@ export const SingleRenderView: React.FC<SingleRenderViewProps> = ({
               </h4>
             </div>
             <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-mono font-bold">
-              {renderOptions.resolution !== 'original' && (
-                <span className="nb-badge nb-badge-yellow">Scale: {renderOptions.resolution}</span>
-              )}
-              {renderOptions.sizeTarget && renderOptions.sizeTarget !== 'balanced' && (
-                <span className="nb-badge">Target: {renderOptions.sizeTarget}</span>
-              )}
               {renderOptions.vhsPreset && renderOptions.vhsPreset !== 'none' && renderOptions.vhsPreset !== 'off' && (
                 <span className="nb-badge nb-badge-cyan">VHS: {activePreset.name}</span>
               )}
@@ -178,7 +171,7 @@ export const SingleRenderView: React.FC<SingleRenderViewProps> = ({
               </h4>
             </div>
             <p className="text-xs font-semibold text-black/80">
-              Will render via lossless, instant stream copy (~300-700x). To apply VHS tape effects, noise, resolution scaling, or image overlays, enable them in the <strong>Render Options</strong> tab.
+              Will render via lossless, instant stream copy (~300-700x). To apply VHS tape effects, night mode, noise, or image overlays, enable them in the <strong>Render Options</strong> tab.
             </p>
           </div>
 

@@ -59,8 +59,6 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
   const overlayOpacity = renderOptions.overlayOpacity ?? 0.8;
   const overlayTimeout = renderOptions.overlayTimeout ?? 'full';
   const overlayAnimation = renderOptions.overlayAnimation || 'static';
-  const resolution = renderOptions.resolution || 'original';
-  const sizeTarget = renderOptions.sizeTarget || 'balanced';
 
   // Local grain slider for canvas visual feedback
   const [noiseGrain, setNoiseGrain] = useState<number>(20);
@@ -81,7 +79,6 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
 
   // Has effects flag
   const hasEffects = Boolean(
-    (resolution && resolution !== 'original') ||
     (vhsPreset && vhsPreset !== 'none' && vhsPreset !== 'off') ||
     nightMode ||
     staticBursts ||
@@ -315,7 +312,7 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
   const handleResetAll = () => {
     setRenderOptions({
       resolution: 'original',
-      sizeTarget: 'balanced',
+      sizeTarget: 'unlimited',
       vhsPreset: 'none',
       nightModeEnabled: false,
       nightIntensity: 0.7,
@@ -369,17 +366,12 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2 pt-1 border-t-[2px] border-black/20 text-[11px] font-mono font-bold">
-            {resolution !== 'original' && (
-              <span className="nb-badge nb-badge-yellow">Scale: {resolution}</span>
-            )}
-            {sizeTarget !== 'balanced' && (
-              <span className="nb-badge">Target: {sizeTarget}</span>
-            )}
+            <span className="nb-badge nb-badge-lime font-mono">Encoder: {selectedEncoder.toUpperCase()}</span>
             {vhsPreset && vhsPreset !== 'none' && vhsPreset !== 'off' && (
               <span className="nb-badge nb-badge-cyan">VHS: {activePreset.name}</span>
             )}
             {nightMode && (
-              <span className="nb-badge nb-badge-lime">Night FX ({Math.round(nightIntensity * 100)}%)</span>
+              <span className="nb-badge nb-badge-yellow">Night FX ({Math.round(nightIntensity * 100)}%)</span>
             )}
             {staticBursts && (
               <span className="nb-badge">Noise &amp; Static</span>
@@ -400,7 +392,7 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
                 ⚡ Fast Stream Copy Mode (Lossless, Instant ~300-700x)
               </h4>
               <p className="text-xs font-semibold text-black/80 mt-0.5">
-                No visual effects, resolution scaling, or image overlays are active. Video packets will remux directly without re-encoding, preserving 100% original quality and finishing in seconds.
+                No visual effects or image overlays are active. Video packets will remux directly without re-encoding, preserving 100% original quality and finishing in seconds.
               </p>
               <p className="text-[11px] font-bold text-black/70 mt-1">
                 👉 To apply VHS tape looks, night mode, film grain, or image overlays, enable any option below.
@@ -434,7 +426,7 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
             <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono font-bold">
               <span className="nb-badge nb-badge-yellow">Preset: {activePreset.name}</span>
               <span className={`nb-badge ${nightMode ? 'nb-badge-cyan' : ''}`}>Night: {nightMode ? 'ON' : 'OFF'}</span>
-              <span className="nb-badge">Res: {resolution}</span>
+              <span className="nb-badge nb-badge-lime font-mono">Encoder: {selectedEncoder.toUpperCase()}</span>
               <span className="nb-badge">Seed: #{noiseSeed}</span>
             </div>
           </div>
@@ -445,7 +437,6 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
               <Code2 className="w-4 h-4" /> Compiled FFmpeg -vf Filtergraph
             </div>
             <div className="bg-[#111] text-yellow-300 border-[3px] border-black p-3 font-mono text-[11px] break-all select-all">
-              {resolution !== 'original' && `scale=${resolution === '1080p' ? '1920:1080' : resolution === '720p' ? '1280:720' : '854:480'}:force_original_aspect_ratio=decrease,pad=${resolution === '1080p' ? '1920:1080' : resolution === '720p' ? '1280:720' : '854:480'}:(ow-iw)/2:(oh-ih)/2,`}
               {activePreset.filtergraph || (!hasEffects ? 'No filter — stream copy enabled (-c:v copy)' : '')}
               {nightMode && `${activePreset.filtergraph ? ',' : ''}eq=brightness=${(-0.05 - 0.45 * nightIntensity).toFixed(2)}:gamma=${(1.0 - 0.65 * nightIntensity).toFixed(2)}`}
               {staticBursts && `${(activePreset.filtergraph || nightMode) ? ',' : ''}noise=alls=65:allf=t+u:all_seed=${noiseSeed}:enable=\'lt(mod(t,4.5),0.35)\',drawbox=y=ih-42:color=white@0.70:width=iw:height=4:t=fill:enable=\'lt(mod(t,4.5),0.35)\'`}
@@ -479,91 +470,53 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
 
         {/* Right Column: All Settings Controls */}
         <div className="lg:col-span-7 space-y-6">
-          {/* 1. Resolution, Quality & Video Encoder Target */}
+          {/* 1. Video Codec & Encoder Engine */}
           <div className="nb-card p-6 space-y-4">
             <h4 className="nb-title text-sm flex items-center justify-between">
               <span className="flex items-center gap-2">
-                <Sliders className="w-4 h-4" /> Output Resolution, Quality &amp; Codec
+                <Sliders className="w-4 h-4" /> Video Codec / Encoder
               </span>
               <span className="nb-badge nb-badge-lime font-mono text-[10px]">
                 {selectedEncoder === 'auto' ? `AUTO (${hwSummary?.recommended || 'GPU'})` : selectedEncoder.toUpperCase()}
               </span>
             </h4>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="space-y-1.5">
-                <label className="nb-label">Resolution Scaling</label>
-                <select
-                  value={resolution}
-                  onChange={e => setRenderOptions(prev => ({ ...prev, resolution: e.target.value as any }))}
-                  className="nb-select w-full"
-                >
-                  <option value="original">Original (fast copy)</option>
-                  <option value="1080p">1080p Full HD</option>
-                  <option value="720p">720p HD</option>
-                  <option value="480p">480p SD</option>
-                </select>
-                <p className="nb-sub">
-                  {resolution === 'original'
-                    ? 'Native resolution preserved.'
-                    : 'Scales with Lanczos (re-encodes).'}
-                </p>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="nb-label">File Size Target</label>
-                <select
-                  value={sizeTarget}
-                  onChange={e => setRenderOptions(prev => ({ ...prev, sizeTarget: e.target.value as any }))}
-                  className="nb-select w-full"
-                >
-                  <option value="small">Small ~250 MB/hr</option>
-                  <option value="balanced">Balanced ~325 MB/hr</option>
-                  <option value="high">High ~400 MB/hr</option>
-                  <option value="unlimited">Max Quality (CRF/Lossless)</option>
-                </select>
-                <p className="nb-sub">
-                  {sizeTarget === 'unlimited'
-                    ? 'Visual scene fidelity without size cap.'
-                    : 'Predictable file size per hour.'}
-                </p>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="nb-label">Video Encoder</label>
-                <select
-                  value={selectedEncoder}
-                  onChange={e => {
-                    if (onSelectedEncoderChange) onSelectedEncoderChange(e.target.value);
-                  }}
-                  className="nb-select w-full font-bold"
-                >
-                  <option value="auto">
-                    Auto ({hwSummary?.recommended || 'Hardware GPU'})
-                  </option>
-                  <optgroup label="Hardware GPU">
-                    {hwSummary?.encoders?.h264_nvenc && <option value="h264_nvenc">NVENC H.264</option>}
-                    {hwSummary?.encoders?.hevc_nvenc && <option value="hevc_nvenc">NVENC HEVC</option>}
-                    {hwSummary?.encoders?.av1_nvenc && <option value="av1_nvenc">NVENC AV1</option>}
-                    {hwSummary?.encoders?.h264_qsv && <option value="h264_qsv">QuickSync H.264</option>}
-                    {hwSummary?.encoders?.hevc_qsv && <option value="hevc_qsv">QuickSync HEVC</option>}
-                    {hwSummary?.encoders?.av1_qsv && <option value="av1_qsv">QuickSync AV1</option>}
-                    {hwSummary?.encoders?.h264_amf && <option value="h264_amf">AMD AMF H.264</option>}
-                    {hwSummary?.encoders?.hevc_amf && <option value="hevc_amf">AMD AMF HEVC</option>}
-                    {hwSummary?.encoders?.h264_videotoolbox && <option value="h264_videotoolbox">Apple H.264</option>}
-                    {hwSummary?.encoders?.hevc_videotoolbox && <option value="hevc_videotoolbox">Apple HEVC</option>}
-                  </optgroup>
-                  <optgroup label="CPU Standards">
-                    <option value="libx264">H.264 (libx264 CRF 18)</option>
-                    <option value="libx265">H.265 (libx265 10-Bit)</option>
-                    <option value="libsvtav1">AV1 (libsvtav1 10-Bit)</option>
-                    {hwSummary?.encoders?.libvvenc && <option value="libvvenc">H.266 (libvvenc 10-Bit)</option>}
-                  </optgroup>
-                </select>
-                <p className="nb-sub">
-                  GPU hardware by default; or pick H.264, H.265, AV1, or H.266.
-                </p>
-              </div>
+            <div className="space-y-2">
+              <label className="nb-label">Encoder Engine (Hardware GPU or Scene-Standard CPU)</label>
+              <select
+                value={selectedEncoder}
+                onChange={e => {
+                  if (onSelectedEncoderChange) onSelectedEncoderChange(e.target.value);
+                }}
+                className="nb-select w-full font-bold text-xs"
+              >
+                <option value="auto">
+                  Auto-Select: {hwSummary?.recommended ? `${hwSummary.recommended} (${hwSummary.gpu_brand})` : 'Fastest Hardware GPU'}
+                </option>
+                <optgroup label="Hardware GPU Encoders">
+                  {hwSummary?.encoders?.h264_nvenc && <option value="h264_nvenc">NVIDIA NVENC H.264 (CUDA)</option>}
+                  {hwSummary?.encoders?.hevc_nvenc && <option value="hevc_nvenc">NVIDIA NVENC HEVC / H.265 (CUDA)</option>}
+                  {hwSummary?.encoders?.av1_nvenc && <option value="av1_nvenc">NVIDIA NVENC AV1 (RTX 40-series+)</option>}
+                  {hwSummary?.encoders?.h264_qsv && <option value="h264_qsv">Intel QuickSync H.264 (QSV)</option>}
+                  {hwSummary?.encoders?.hevc_qsv && <option value="hevc_qsv">Intel QuickSync HEVC / H.265 (QSV)</option>}
+                  {hwSummary?.encoders?.av1_qsv && <option value="av1_qsv">Intel QuickSync AV1 (QSV)</option>}
+                  {hwSummary?.encoders?.h264_amf && <option value="h264_amf">AMD AMF H.264 (Radeon)</option>}
+                  {hwSummary?.encoders?.hevc_amf && <option value="hevc_amf">AMD AMF HEVC / H.265 (Radeon)</option>}
+                  {hwSummary?.encoders?.h264_videotoolbox && <option value="h264_videotoolbox">Apple VideoToolbox H.264</option>}
+                  {hwSummary?.encoders?.hevc_videotoolbox && <option value="hevc_videotoolbox">Apple VideoToolbox HEVC</option>}
+                </optgroup>
+                <optgroup label="High-Fidelity CPU Encoders (Universal Scene Standards)">
+                  <option value="libx264">H.264 / AVC (libx264) - Maximum Universal Compatibility (Slow CRF 18)</option>
+                  <option value="libx265">H.265 / HEVC (libx265) - 10-Bit Pristine Compression (CRF 20)</option>
+                  <option value="libsvtav1">AV1 (libsvtav1) - Next-Gen Ultra Efficiency (10-Bit Preset 5)</option>
+                  {hwSummary?.encoders?.libvvenc && (
+                    <option value="libvvenc">H.266 / VVC (libvvenc) - Future-Gen Compact (10-Bit Fast QP 24)</option>
+                  )}
+                </optgroup>
+              </select>
+              <p className="nb-sub">
+                Uses unconstrained visually-lossless quality (CRF 18 / 20 / 24). Preserves 100% native resolution, renders the base clip once in pristine quality, and stream-copies at 50x–100x speed across the entire audio duration.
+              </p>
             </div>
           </div>
 

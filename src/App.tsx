@@ -93,7 +93,7 @@ export default function App() {
       overlayOpacity: 0.8,
       overlayTimeout: 'full',
       overlayAnimation: 'static',
-      sizeTarget: 'balanced',
+      sizeTarget: 'unlimited',
     };
   });
 
@@ -379,7 +379,6 @@ export default function App() {
   ) => {
     const bulkFolder = overlayFolder || renderOptions.overlayFolder || overlayImageFolder;
     const hasEffects = Boolean(
-      (renderOptions.resolution && renderOptions.resolution !== 'original') ||
       (renderOptions.vhsPreset && renderOptions.vhsPreset !== 'none' && renderOptions.vhsPreset !== 'off') ||
       renderOptions.nightModeEnabled ||
       renderOptions.noiseStaticEnabled ||
@@ -730,7 +729,7 @@ export default function App() {
                     Preview Sample Rendered: 5.0s
                   </p>
                   <p className="text-[11px] text-gray-400 font-mono mt-1">
-                    Preset: {renderOptions.vhsPreset || 'none'} &bull; Res: {renderOptions.resolution}
+                    Preset: {renderOptions.vhsPreset || 'none'} &bull; Encoder: {selectedEncoder.toUpperCase()}
                   </p>
                 </div>
               </div>

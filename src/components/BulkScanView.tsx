@@ -95,7 +95,6 @@ export const BulkScanView: React.FC<BulkScanViewProps> = ({
   const [existingOutputNames, setExistingOutputNames] = useState<Set<string>>(new Set());
 
   const hasEffects = Boolean(
-    (renderOptions.resolution && renderOptions.resolution !== 'original') ||
     (renderOptions.vhsPreset && renderOptions.vhsPreset !== 'none' && renderOptions.vhsPreset !== 'off') ||
     renderOptions.nightModeEnabled ||
     renderOptions.noiseStaticEnabled ||
@@ -325,12 +324,6 @@ export const BulkScanView: React.FC<BulkScanViewProps> = ({
               All scanned pairs will be queued for Re-Encode using active filters configured in Render Options.
             </p>
             <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-mono font-bold pt-1">
-              {renderOptions.resolution !== 'original' && (
-                <span className="nb-badge nb-badge-yellow">Scale: {renderOptions.resolution}</span>
-              )}
-              {renderOptions.sizeTarget && renderOptions.sizeTarget !== 'balanced' && (
-                <span className="nb-badge">Target: {renderOptions.sizeTarget}</span>
-              )}
               {renderOptions.vhsPreset && renderOptions.vhsPreset !== 'none' && renderOptions.vhsPreset !== 'off' && (
                 <span className="nb-badge nb-badge-cyan">VHS: {renderOptions.vhsPreset}</span>
               )}
@@ -367,7 +360,7 @@ export const BulkScanView: React.FC<BulkScanViewProps> = ({
               </h4>
             </div>
             <p className="text-xs font-semibold text-black/80">
-              All scanned pairs will render via lossless stream copy (~300-700x speed). To apply VHS tape effects, noise, resolution scaling, or image overlays, turn them on in the <strong>Render Options</strong> tab before scanning.
+              All scanned pairs will render via lossless stream copy (~300-700x speed). To apply VHS tape effects, night mode, noise, or image overlays, turn them on in the <strong>Render Options</strong> tab before scanning.
             </p>
           </div>
 

@@ -9,8 +9,15 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ## [Unreleased]
 
-### Planned
-- (nothing yet)
+### Changed
+- **Streamlined Video Quality & Encoder Controls**:
+  - Removed obsolete "Resolution Scaling" and "File Size Target" controls from Visual Effects Studio, keeping the focus entirely on pristine quality and user-selected Video Encoder.
+  - Fast Stream Copy vs Re-encode remains 100% automatic: when visual effects/overlays are inactive, videos remux losslessly at ~300-700x speed without touch. When effects are enabled, videos encode at native resolution in unconstrained scene CRF quality.
+
+### Fixed
+- **Pixelation & Macroblocking on Re-Encodes**:
+  - Completely eliminated the artificial file-size bitrate bottleneck (`_SIZE_TIERS`) that previously capped video bitrates to ~440–718 kbps on 1080p renders, causing severe compression artifacts and pixelation.
+  - All encodes now execute in pure, unconstrained visually-lossless scene CRF quality (`libx264` CRF 18, `libx265` 10-bit CRF 20, `libsvtav1` 10-bit CRF 24, NVENC CQ 18, QuickSync GQ 18), delivering crystal-clear, sharp, artifact-free video while keeping file sizes compact.
 
 ---
 

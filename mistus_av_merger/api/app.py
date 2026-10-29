@@ -466,8 +466,7 @@ def _pick_probe_duration(path: Path) -> Optional[float]:
         return None
 
 
-# Output size targets: MB of file size per hour of AUDIO (effects on or off).
-# (mb_per_hour, audio_bitrate_kbps) — video bitrate = the remainder.
+# Backwards compatibility stub: file size tier capping removed in favor of scene CRF visual quality
 _SIZE_TIERS = {
     "small": (250.0, 128),
     "balanced": (325.0, 160),
@@ -476,20 +475,9 @@ _SIZE_TIERS = {
 
 
 def _apply_size_tier(options: Dict[str, Any], audio_dur: float) -> None:
-    """Converts a sizeTarget tier into concrete per-job bitrate caps.
-
-    video_kbps = (MB/hour * 8192 kbit/MB / 3600 s) - audio kbps, floored at a
-    sane minimum. Stored in options so it persists with the job for resumes.
-    """
-    tier = str(options.get("sizeTarget") or "balanced").lower()
-    if tier == "unlimited" or audio_dur <= 0:
-        options.pop("videoBitrateKbps", None)
-        options.pop("audioBitrateKbps", None)
-        return
-    mb_per_hour, audio_kbps = _SIZE_TIERS.get(tier, _SIZE_TIERS["balanced"])
-    total_kbps = mb_per_hour * 8192.0 / 3600.0
-    options["audioBitrateKbps"] = audio_kbps
-    options["videoBitrateKbps"] = max(150, int(round(total_kbps - audio_kbps)))
+    """Legacy stub: Bitrate capping has been replaced with pristine scene CRF quality."""
+    options.pop("videoBitrateKbps", None)
+    options.pop("audioBitrateKbps", None)
 
 
 class QueueAddRequest(BaseModel):
@@ -571,8 +559,7 @@ def add_jobs(req: QueueAddRequest):
             options.pop("overlayPath", None)
 
         has_effects = bool(
-            (options.get("resolution") and options.get("resolution") != "original")
-            or (options.get("vhsPreset") and options.get("vhsPreset") not in ("none", "off"))
+            (options.get("vhsPreset") and options.get("vhsPreset") not in ("none", "off"))
             or options.get("nightModeEnabled")
             or options.get("noiseStaticEnabled")
             or (options.get("overlayEnabled") and (options.get("overlayPath") or raw.get("overlay_folder") or options.get("overlayFolder")))
@@ -581,11 +568,10 @@ def add_jobs(req: QueueAddRequest):
             mode = "encode"
             mode_reason = "Visual effects / overlay active (re-encode required)"
 
-        if mode == "encode":
-            _apply_size_tier(options, audio_dur)
-        else:
-            options.pop("videoBitrateKbps", None)
-            options.pop("audioBitrateKbps", None)
+        # Always clear any artificial bitrate caps so encodes run in visually-lossless CRF mode
+        options.pop("videoBitrateKbps", None)
+        options.pop("audioBitrateKbps", None)
+        options.pop("sizeTarget", None)
 
         job_options = {**options, "video_duration_sec": video_dur}
 
@@ -746,7 +732,6 @@ def _execute_job(job: RenderJob):
                         overlay_animation=overlay_animation,
                         loop_input=(video_dur < t_overlay),
                         duration_sec=t_overlay,
-                        bitrate_kbps=int(opts["videoBitrateKbps"]) if opts.get("videoBitrateKbps") else None,
                         threads=job_threads,
                     )
                     job.encoder = encoder
@@ -775,7 +760,6 @@ def _execute_job(job: RenderJob):
                                 overlay_animation=overlay_animation,
                                 loop_input=(video_dur < t_overlay),
                                 duration_sec=t_overlay,
-                                bitrate_kbps=int(opts["videoBitrateKbps"]) if opts.get("videoBitrateKbps") else None,
                                 threads=job_threads,
                             )
                             _run_render_process(job, cmd_a)
@@ -798,7 +782,6 @@ def _execute_job(job: RenderJob):
                             overlay_path=None,  # No overlay in Segment B!
                             loop_input=(video_dur < clean_loop_dur),
                             duration_sec=clean_loop_dur,
-                            bitrate_kbps=int(opts["videoBitrateKbps"]) if opts.get("videoBitrateKbps") else None,
                             threads=job_threads,
                         )
                         _run_render_process(job, cmd_b_clean)
@@ -874,7 +857,6 @@ def _execute_job(job: RenderJob):
                             overlay_animation=overlay_animation,
                             loop_input=(video_dur < loop_dur),
                             duration_sec=loop_dur,
-                            bitrate_kbps=int(opts["videoBitrateKbps"]) if opts.get("videoBitrateKbps") else None,
                             threads=job_threads,
                         )
 
@@ -932,8 +914,6 @@ def _execute_job(job: RenderJob):
                     overlay_timeout=opts.get("overlayTimeout"),
                     overlay_animation=overlay_animation,
                     duration_sec=job.duration or None,
-                    bitrate_kbps=int(opts["videoBitrateKbps"]) if opts.get("videoBitrateKbps") else None,
-                    audio_bitrate_kbps=int(opts["audioBitrateKbps"]) if opts.get("audioBitrateKbps") else None,
                     threads=job_threads,
                 )
 
