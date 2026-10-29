@@ -9,8 +9,15 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ## [Unreleased]
 
-### Planned
-- (nothing yet)
+### Fixed
+- **Built-in Fallback for Preset Catalog in Frozen Executables**:
+  - Fixed an issue where `PresetManager` failed to resolve `presets_v1.json` when running inside the compiled PyInstaller executable (due to `base_library.zip` bytecode packaging), returning `None` for all VHS presets and causing all VHS options to produce identical un-filtered output.
+  - Implemented multi-path candidate discovery (`sys._MEIPASS`, `exe_dir/_internal`, source package dir, and CWD) along with a compiled-in `DEFAULT_PRESETS` in-memory fallback, guaranteeing that all 7 presets always load reliably regardless of packaging environment.
+- **Night Mode Intensity Scaling & Footage Visibility**:
+  - Replaced the static black-crush curve with smooth, continuous parametric gamma scaling (`gamma`, `gamma_r`, `gamma_b`) that responds directly to the `night_intensity` slider.
+  - Footage remains clearly visible across all intensity levels, smoothly shifting from gentle evening twilight at low values to cinematic moonlit midnight at higher values without blacking out subjects.
+- **Distinct Visual Signatures Across All VHS Presets**:
+  - Differentiated the 7 VHS presets with unique visual identities (tape softening, chroma shift, head-switching glitch bars, sync tear lines, incandescent color balances, and CCTV surveillance monitor effects) so each preset has a distinct look.
 
 ---
 

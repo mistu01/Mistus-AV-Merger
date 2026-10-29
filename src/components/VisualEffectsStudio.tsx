@@ -195,32 +195,32 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
         }
       }
 
-      // 6. Night mode tint & vignette (calibrated for absolute darkness)
+      // 6. Night mode tint & vignette (smooth continuous scaling with nightIntensity)
       if (nightMode) {
-        // Deep shadow crush
+        // Shadow dimming
         ctx.save();
-        ctx.fillStyle = `rgba(0, 0, 0, ${nightIntensity * 0.70})`;
+        ctx.fillStyle = `rgba(0, 0, 0, ${nightIntensity * 0.45})`;
         ctx.fillRect(0, 0, w, h);
         ctx.restore();
 
-        // Midnight dark cold tint
+        // Moonlight cold wash
         ctx.save();
         ctx.globalCompositeOperation = 'color-burn';
-        ctx.fillStyle = `rgba(15, 23, 42, ${nightIntensity * 0.85})`;
+        ctx.fillStyle = `rgba(15, 23, 42, ${nightIntensity * 0.60})`;
         ctx.fillRect(0, 0, w, h);
         ctx.restore();
 
-        // Moonlight highlights
+        // Subtle cool blue screen
         ctx.save();
         ctx.globalCompositeOperation = 'screen';
-        ctx.fillStyle = `rgba(30, 58, 138, ${nightIntensity * 0.20})`;
+        ctx.fillStyle = `rgba(30, 58, 138, ${nightIntensity * 0.25})`;
         ctx.fillRect(0, 0, w, h);
         ctx.restore();
 
-        // Heavy nocturnal vignette
-        const vigGrad = ctx.createRadialGradient(w / 2, h / 2, w * 0.20, w / 2, h / 2, w * 0.65);
+        // Edge vignette
+        const vigGrad = ctx.createRadialGradient(w / 2, h / 2, w * 0.25, w / 2, h / 2, w * 0.65);
         vigGrad.addColorStop(0, 'rgba(0,0,0,0)');
-        vigGrad.addColorStop(1, `rgba(0,0,0,${Math.min(1.0, nightIntensity * 0.95)})`);
+        vigGrad.addColorStop(1, `rgba(0,0,0,${Math.min(0.85, 0.20 + nightIntensity * 0.65)})`);
         ctx.fillStyle = vigGrad;
         ctx.fillRect(0, 0, w, h);
       }
@@ -431,7 +431,7 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
             <div className="bg-[#111] text-yellow-300 border-[3px] border-black p-3 font-mono text-[11px] break-all select-all">
               {resolution !== 'original' && `scale=${resolution === '1080p' ? '1920:1080' : resolution === '720p' ? '1280:720' : '854:480'}:force_original_aspect_ratio=decrease,pad=${resolution === '1080p' ? '1920:1080' : resolution === '720p' ? '1280:720' : '854:480'}:(ow-iw)/2:(oh-ih)/2,`}
               {activePreset.filtergraph || (!hasEffects ? 'No filter — stream copy enabled (-c:v copy)' : '')}
-              {nightMode && `${activePreset.filtergraph ? ',' : ''}eq=contrast=1.5:brightness=-0.40,curves=all='0/0 0.2/0.01 0.4/0.07 0.7/0.25 1/0.70',vignette=PI/2.35,noise=14`}
+              {nightMode && `${activePreset.filtergraph ? ',' : ''}eq=contrast=${(1.05 + 0.25 * nightIntensity).toFixed(2)}:brightness=${(-0.04 - 0.22 * nightIntensity).toFixed(2)}:saturation=${Math.max(0.15, 1.0 - 0.75 * nightIntensity).toFixed(2)}:gamma=${Math.max(0.45, 1.0 - 0.45 * nightIntensity).toFixed(2)},vignette=PI/3.5*${(0.20 + 0.80 * nightIntensity).toFixed(2)},noise=${Math.round(8 + 14 * nightIntensity)}`}
               {staticBursts && `${(activePreset.filtergraph || nightMode) ? ',' : ''}noise=alls=35:allf=t+u:all_seed=${noiseSeed}`}
               {overlayEnabled && (overlayAnimation === 'bounce'
                 ? `${(activePreset.filtergraph || nightMode || staticBursts) ? ',' : ''}[1:v]scale=rw*0.40:-1[ov];[0:v][ov]overlay=x='(W-w)-abs(mod(0.15*W*t,2*(W-w))-(W-w))':y='(H-h)-abs(mod(0.11*H*t,2*(H-h))-(H-h))'${overlayTimeout !== 'full' ? `:enable='lte(t,${overlayTimeout})'` : ''}`

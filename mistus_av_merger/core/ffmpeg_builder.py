@@ -158,17 +158,22 @@ class FFmpegCommandBuilder:
         if filtergraph:
             vfilters.append(filtergraph)
 
-        # 3. Night mode grading - calibrated for absolute darkness
+        # 3. Night mode grading - smooth continuous scaling across intensity slider
         if night_mode:
-            b_val = -0.15 - (0.35 * night_intensity)
-            c_val = 1.25 + (0.35 * night_intensity)
-            sat_val = max(0.05, 0.45 - (0.35 * night_intensity))
-            vig_val = min(1.35, 0.75 + (0.55 * night_intensity))
+            n_int = max(0.05, min(1.0, float(night_intensity)))
+            b_val = -0.04 - (0.22 * n_int)
+            c_val = 1.05 + (0.25 * n_int)
+            sat_val = max(0.15, 1.0 - (0.75 * n_int))
+            g_val = max(0.45, 1.0 - (0.45 * n_int))
+            g_r = g_val * 0.85
+            g_b = min(1.50, g_val * 1.25)
+            vig_val = 0.20 + (0.80 * n_int)
+            noise_val = int(8 + 14 * n_int)
             vfilters.append(
-                f"eq=contrast={c_val:.2f}:brightness={b_val:.2f}:saturation={sat_val:.2f},"
-                f"curves=all='0/0 0.2/0.01 0.4/0.07 0.7/0.25 1/0.70':blue='0/0 0.3/0.10 0.6/0.40 1/0.80':red='0/0 0.5/0.10 1/0.55',"
-                f"vignette=PI/2.35*{vig_val:.2f}:eval=init,"
-                f"noise=alls=14:allf=t+u"
+                f"eq=contrast={c_val:.2f}:brightness={b_val:.2f}:saturation={sat_val:.2f}:gamma={g_val:.2f}:gamma_r={g_r:.2f}:gamma_b={g_b:.2f},"
+                f"curves=all='0/0 0.5/0.46 1/0.95',"
+                f"vignette=PI/3.5*{vig_val:.2f}:eval=init,"
+                f"noise=alls={noise_val}:allf=t+u"
             )
 
         # 4. Noise and static synthesis
@@ -312,15 +317,20 @@ class FFmpegCommandBuilder:
             vfilters.append(filtergraph)
 
         if night_mode:
-            b_val = -0.15 - (0.35 * night_intensity)
-            c_val = 1.25 + (0.35 * night_intensity)
-            sat_val = max(0.05, 0.45 - (0.35 * night_intensity))
-            vig_val = min(1.35, 0.75 + (0.55 * night_intensity))
+            n_int = max(0.05, min(1.0, float(night_intensity)))
+            b_val = -0.04 - (0.22 * n_int)
+            c_val = 1.05 + (0.25 * n_int)
+            sat_val = max(0.15, 1.0 - (0.75 * n_int))
+            g_val = max(0.45, 1.0 - (0.45 * n_int))
+            g_r = g_val * 0.85
+            g_b = min(1.50, g_val * 1.25)
+            vig_val = 0.20 + (0.80 * n_int)
+            noise_val = int(8 + 14 * n_int)
             vfilters.append(
-                f"eq=contrast={c_val:.2f}:brightness={b_val:.2f}:saturation={sat_val:.2f},"
-                f"curves=all='0/0 0.2/0.01 0.4/0.07 0.7/0.25 1/0.70':blue='0/0 0.3/0.10 0.6/0.40 1/0.80':red='0/0 0.5/0.10 1/0.55',"
-                f"vignette=PI/2.35*{vig_val:.2f}:eval=init,"
-                f"noise=alls=14:allf=t+u"
+                f"eq=contrast={c_val:.2f}:brightness={b_val:.2f}:saturation={sat_val:.2f}:gamma={g_val:.2f}:gamma_r={g_r:.2f}:gamma_b={g_b:.2f},"
+                f"curves=all='0/0 0.5/0.46 1/0.95',"
+                f"vignette=PI/3.5*{vig_val:.2f}:eval=init,"
+                f"noise=alls={noise_val}:allf=t+u"
             )
 
         if noise_static and "noise=" not in filtergraph:
