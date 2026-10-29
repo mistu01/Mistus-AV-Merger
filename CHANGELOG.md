@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ## [Unreleased]
 
+### Planned
+- (nothing yet)
+
+---
+
+## [0.6.27] - 2026-10-29
+
 ### Changed
 - **Streamlined Video Quality & Encoder Controls**:
   - Removed obsolete "Resolution Scaling" and "File Size Target" controls from Visual Effects Studio, keeping the focus entirely on pristine quality and user-selected Video Encoder.
