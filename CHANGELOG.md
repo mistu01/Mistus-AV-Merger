@@ -9,8 +9,9 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ## [Unreleased]
 
-### Planned
-- (nothing yet)
+### Fixed
+- **TypeScript Type Error in VHS Preset Definitions**:
+  - Corrected property name `chroma_shift` to `chromaShift` in `tracking_errors` preset object (`src/data/presets.ts`), resolving GitHub Actions CI / Build failure `TS2561`.
 
 ---
 

@@ -57,7 +57,7 @@ export const VHS_PRESETS: VHSPreset[] = [
     intensity: 0.8,
     scanlines: false,
     trackingNoise: true,
-    chroma_shift: true,
+    chromaShift: true,
     colorGrading: 'harsh_analog',
   },
   {
