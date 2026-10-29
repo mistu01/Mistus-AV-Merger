@@ -66,3 +66,21 @@ def test_pairing_random_seeded_deterministic():
     order1 = [p["video"].filename for p in plan1["pairings"]]
     order2 = [p["video"].filename for p in plan2["pairings"]]
     assert order1 == order2
+
+def test_pairing_order_1_to_1_single_video_loops_all():
+    audio = [DummyMedia("s1.mp3"), DummyMedia("s2.mp3"), DummyMedia("s3.mp3")]
+    video = [DummyMedia("loop.mp4")]
+
+    plan = AutoPairingEngine.pair(audio, video, mode="order_1_to_1")
+    assert len(plan["pairings"]) == 3
+    assert len(plan["unmatched_audio"]) == 0
+    assert all(p["video"].filename == "loop.mp4" for p in plan["pairings"])
+
+
+def test_pairing_manual_mode_all_rows():
+    audio = [DummyMedia(f"track{i}.mp3") for i in range(4)]
+    video = [DummyMedia("clip.mp4")]
+
+    plan = AutoPairingEngine.pair(audio, video, mode="manual")
+    assert len(plan["pairings"]) == 4
+    assert len(plan["unmatched_audio"]) == 0

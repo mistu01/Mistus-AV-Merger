@@ -416,6 +416,14 @@ export function autoPair(
       preset: renderOptions.vhsPreset
     });
 
+    // Never overwrite source video clip if output name matches input video filename
+    if (outputName.toLowerCase() === video.filename.toLowerCase()) {
+      const extMatch = outputName.match(/\.[^.]+$/);
+      const ext = extMatch ? extMatch[0] : '';
+      const base = outputName.replace(/\.[^.]+$/, '');
+      outputName = `${base}_merged${ext}`;
+    }
+
     const loopCount = video.duration > 0 ? parseFloat((audio.duration / video.duration).toFixed(2)) : 1;
 
     return {
@@ -488,6 +496,13 @@ export function autoPair(
     }
 
     case 'order_1_to_1': {
+      if (sortedVideo.length === 1) {
+        // Single video clip loops for all audio tracks
+        sortedAudio.forEach((audio, idx) => {
+          pairings.push(createPairing(audio, sortedVideo[0], idx, 1.0));
+        });
+        break;
+      }
       const minLen = Math.min(sortedAudio.length, sortedVideo.length);
       for (let i = 0; i < minLen; i++) {
         pairings.push(createPairing(sortedAudio[i], sortedVideo[i], i, 1.0));
@@ -556,7 +571,15 @@ export function autoPair(
       break;
     }
 
-    case 'manual':
+    case 'manual': {
+      // In manual mode, create a row for each audio track so the user can customize each row
+      sortedAudio.forEach((audio, idx) => {
+        const video = sortedVideo[idx % sortedVideo.length];
+        pairings.push(createPairing(audio, video, idx, 1.0));
+      });
+      break;
+    }
+
     default: {
       const minLen = Math.min(sortedAudio.length, sortedVideo.length);
       for (let i = 0; i < minLen; i++) {

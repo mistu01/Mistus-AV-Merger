@@ -261,3 +261,35 @@ test('planSegments cuts total duration into continuous segments', () => {
   assert.equal(segments[2].startTime, 200);
   assert.equal(segments[2].duration, 50);
 });
+
+test('autoPair: 1 video loops across multiple audio tracks in order_1_to_1', () => {
+  const audio = createProbes(['song1.mp3', 'song2.mp3', 'song3.mp3'], 180, 'audio');
+  const video = createProbes(['single_background.mp4'], 30, 'video');
+
+  const plan = autoPair(audio, video, 'order_1_to_1');
+  assert.equal(plan.pairings.length, 3);
+  assert.equal(plan.unmatchedAudio.length, 0);
+  assert.equal(plan.pairings[0].video.filename, 'single_background.mp4');
+  assert.equal(plan.pairings[1].video.filename, 'single_background.mp4');
+  assert.equal(plan.pairings[2].video.filename, 'single_background.mp4');
+});
+
+test('autoPair: manual mode creates pairing rows for all audio tracks', () => {
+  const audio = createProbes(['a1.mp3', 'a2.mp3', 'a3.mp3', 'a4.mp3'], 100, 'audio');
+  const video = createProbes(['v1.mp4'], 25, 'video');
+
+  const plan = autoPair(audio, video, 'manual');
+  assert.equal(plan.pairings.length, 4);
+  assert.equal(plan.unmatchedAudio.length, 0);
+});
+
+test('autoPair: prevents overwriting input video clip when outputName matches video.filename', () => {
+  // e.g. when audio is clip.mp3 and video is clip.mp4, and template is {audio_name}.{video_ext}
+  const audio = createProbes(['clip.mp3'], 60, 'audio');
+  const video = createProbes(['clip.mp4'], 30, 'video');
+
+  const plan = autoPair(audio, video, 'order_1_to_1');
+  assert.equal(plan.pairings.length, 1);
+  // Must append _merged so source clip.mp4 is never destroyed
+  assert.equal(plan.pairings[0].outputName, 'clip_merged.mp4');
+});

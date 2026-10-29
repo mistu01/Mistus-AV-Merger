@@ -128,27 +128,36 @@ class AutoPairingEngine:
                 warnings.append(f"{len(unmatched_video)} video clip(s) were not matched by any audio file.")
 
         elif mode == "order_1_to_1":
-            min_len = min(len(audio_files), len(video_files))
-            for i in range(min_len):
-                pairings.append({
-                    "id": f"pair_{i}",
-                    "audio": audio_files[i],
-                    "video": video_files[i],
-                    "confidence": 1.0,
-                })
-            unmatched_audio.extend(audio_files[min_len:])
-            unmatched_video.extend(video_files[min_len:])
+            if len(video_files) == 1:
+                for i, audio in enumerate(audio_files):
+                    pairings.append({
+                        "id": f"pair_{i}",
+                        "audio": audio,
+                        "video": video_files[0],
+                        "confidence": 1.0,
+                    })
+            else:
+                min_len = min(len(audio_files), len(video_files))
+                for i in range(min_len):
+                    pairings.append({
+                        "id": f"pair_{i}",
+                        "audio": audio_files[i],
+                        "video": video_files[i],
+                        "confidence": 1.0,
+                    })
+                unmatched_audio.extend(audio_files[min_len:])
+                unmatched_video.extend(video_files[min_len:])
 
-            if len(audio_files) > len(video_files):
-                warnings.append(
-                    f"More audio ({len(audio_files)}) than video ({len(video_files)}). "
-                    f"Last {len(unmatched_audio)} audio file(s) remain unmatched. Consider 'Cycle' mode."
-                )
-            elif len(video_files) > len(audio_files):
-                warnings.append(
-                    f"More video ({len(video_files)}) than audio ({len(audio_files)}). "
-                    f"{len(unmatched_video)} video clip(s) remain unused."
-                )
+                if len(audio_files) > len(video_files):
+                    warnings.append(
+                        f"More audio ({len(audio_files)}) than video ({len(video_files)}). "
+                        f"Last {len(unmatched_audio)} audio file(s) remain unmatched. Consider 'Cycle' mode."
+                    )
+                elif len(video_files) > len(audio_files):
+                    warnings.append(
+                        f"More video ({len(video_files)}) than audio ({len(audio_files)}). "
+                        f"{len(unmatched_video)} video clip(s) remain unused."
+                    )
 
         elif mode == "one_for_all":
             selected = video_files[0]
@@ -205,7 +214,16 @@ class AutoPairingEngine:
                     "confidence": 1.0,
                 })
 
-        else:  # manual / fallback
+        elif mode == "manual":
+            for i, audio in enumerate(audio_files):
+                pairings.append({
+                    "id": f"pair_{i}",
+                    "audio": audio,
+                    "video": video_files[i % len(video_files)],
+                    "confidence": 1.0,
+                })
+
+        else:  # fallback
             min_len = min(len(audio_files), len(video_files))
             for i in range(min_len):
                 pairings.append({

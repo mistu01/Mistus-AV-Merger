@@ -293,10 +293,12 @@ export default function App() {
       case 'bulk_audio':
         setAudioFolder(path);
         updateSettings({ last_audio_folder: path });
+        if (!videoFolder) setVideoFolder(path);
         break;
       case 'bulk_video':
         setVideoFolder(path);
         updateSettings({ last_video_folder: path });
+        if (!audioFolder) setAudioFolder(path);
         break;
     }
   };

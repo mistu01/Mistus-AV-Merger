@@ -9,8 +9,12 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ## [Unreleased]
 
-### Planned
-- (nothing yet)
+### Fixed
+- **Same-Folder Scanning & Pairing**: Fixed an issue where scanning media when audio and video files reside in the same folder (either via "Audio & video in the same folder" checkbox or setting both folder paths to the same directory) caused video clips to be discarded (`scannedVideo = []`), resulting in 0 pairs and preventing queue starts.
+- **Single Video Loop in Order 1:1 Mode**: When a single video clip is present alongside multiple audio tracks in `order_1_to_1` mode, the engine now loops that clip across all audio tracks instead of stranding remaining tracks as unmatched.
+- **Manual Mode Full-List Coverage**: `manual` pairing mode now creates rows for all scanned audio tracks so users can customize video dropdowns per row without dropped tracks.
+- **Source Video Overwrite Prevention**: Output naming now guards against collisions with input video clips, appending `_merged` if the output file would share the exact filename of a source video.
+- **Interactive Pairing Rule Fallback UI**: Step 3 now shows detailed diagnostics and 1-click rule switcher buttons (Switch to 1:1, Switch to Cycle, Switch to One for All) when a pairing mode (like By Name) finds no matching filenames, preventing confusion.
 
 ---
 

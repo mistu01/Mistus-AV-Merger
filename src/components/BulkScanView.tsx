@@ -145,27 +145,51 @@ export const BulkScanView: React.FC<BulkScanViewProps> = ({
     setManualVideoOverrides({});
     try {
       await refreshExistingOutputs(outputFolder);
-      if (sameFolder && audioFolder) {
-        const result = await scanFolder(audioFolder, recursive);
-        setScannedAudio(result.audio);
-        setScannedVideo(result.video);
+
+      const norm = (p: string) => p.trim().replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+      const targetA = (audioFolder || '').trim();
+      const targetV = (videoFolder || '').trim();
+
+      const isSingleFolder = sameFolder || !targetV || !targetA || norm(targetA) === norm(targetV);
+      const singleDir = targetA || targetV;
+
+      if (isSingleFolder) {
+        if (!singleDir) {
+          setScanError('Please select a folder to scan.');
+          setScannedAudio([]);
+          setScannedVideo([]);
+          return;
+        }
+        const result = await scanFolder(singleDir, recursive);
+        const aList = result.audio || [];
+        const vList = result.video || [];
+        setScannedAudio(aList);
+        setScannedVideo(vList);
+
+        if (aList.length === 0 && vList.length === 0) {
+          setScanError('No supported audio or video files found in the selected folder.');
+        }
       } else {
-        const jobs: Array<Promise<{ folder: string; result: { audio: MediaProbe[]; video: MediaProbe[] } }>> = [];
-        if (audioFolder) {
-          jobs.push(scanFolder(audioFolder, recursive).then(r => ({ folder: 'audio', result: r })));
+        const [resAudio, resVideo] = await Promise.all([
+          scanFolder(targetA, recursive),
+          scanFolder(targetV, recursive),
+        ]);
+        const aAudio = resAudio.audio || [];
+        const aVideo = resAudio.video || [];
+        const vAudio = resVideo.audio || [];
+        const vVideo = resVideo.video || [];
+
+        // Audio comes from targetA (fallback to targetV if targetA has no audio)
+        const finalAudio = aAudio.length > 0 ? aAudio : vAudio;
+        // Video comes from targetV (fallback to targetA if targetV has no video)
+        const finalVideo = vVideo.length > 0 ? vVideo : aVideo;
+
+        setScannedAudio(finalAudio);
+        setScannedVideo(finalVideo);
+
+        if (finalAudio.length === 0 && finalVideo.length === 0) {
+          setScanError('No supported audio or video files found in the selected folders.');
         }
-        if (videoFolder && !sameFolder && videoFolder !== audioFolder) {
-          jobs.push(scanFolder(videoFolder, recursive).then(r => ({ folder: 'video', result: r })));
-        }
-        const results = await Promise.all(jobs);
-        let audio: MediaProbe[] = [];
-        let video: MediaProbe[] = [];
-        for (const { folder, result } of results) {
-          if (folder === 'audio') audio = [...audio, ...result.audio];
-          else video = [...video, ...result.video];
-        }
-        setScannedAudio(audio);
-        setScannedVideo(video);
       }
       setSingleVideoId('');
     } catch (e: any) {
@@ -364,9 +388,14 @@ export const BulkScanView: React.FC<BulkScanViewProps> = ({
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="space-y-1.5">
-            <span className="nb-label">Audio Folder</span>
+            <span className="nb-label">{sameFolder ? 'Audio & Video Folder' : 'Audio Folder'}</span>
             <div className="flex gap-2">
-              <input type="text" readOnly value={audioFolder} className="nb-input nb-input-readonly w-full text-[11px]" />
+              <input
+                type="text"
+                readOnly
+                value={audioFolder || (sameFolder ? videoFolder : '')}
+                className="nb-input nb-input-readonly w-full text-[11px]"
+              />
               <button onClick={() => onOpenFolderBrowser('bulk_audio')} className="nb-btn nb-btn-cyan nb-press shrink-0">
                 Browse
               </button>
@@ -384,8 +413,9 @@ export const BulkScanView: React.FC<BulkScanViewProps> = ({
                   </button>
                 </>
               ) : (
-                <div className="nb-inset w-full px-3 py-2 text-[11px] font-bold">
-                  Video auto-detected inside the audio folder
+                <div className="nb-inset w-full px-3 py-2 text-[11px] font-bold text-black/70 flex items-center justify-between">
+                  <span>Audio &amp; video auto-detected together</span>
+                  <span className="text-[10px] uppercase font-mono font-black text-purple-700">Same Folder</span>
                 </div>
               )}
             </div>
@@ -630,10 +660,61 @@ export const BulkScanView: React.FC<BulkScanViewProps> = ({
         )}
 
         {plan.pairings.length === 0 ? (
-          <div className="p-10 text-center bg-white">
-            <FolderSearch className="w-10 h-10 mx-auto mb-2 text-black/30" />
-            <p className="text-sm font-black">No pairs yet</p>
-            <p className="nb-sub mt-1">Scan folders in Step 1 first — you'll see every audio-to-clip pair here before anything renders.</p>
+          <div className="p-10 text-center bg-white space-y-3">
+            <FolderSearch className="w-10 h-10 mx-auto text-black/30" />
+            {scannedAudio.length === 0 && scannedVideo.length === 0 ? (
+              <>
+                <p className="text-sm font-black">No files scanned yet</p>
+                <p className="nb-sub">Point to your folder(s) in Step 1 above and click &ldquo;Scan Folders&rdquo;.</p>
+              </>
+            ) : scannedAudio.length > 0 && scannedVideo.length === 0 ? (
+              <>
+                <p className="text-sm font-black text-amber-700">
+                  Found {scannedAudio.length} audio file{scannedAudio.length === 1 ? '' : 's'}, but no video clips
+                </p>
+                <p className="nb-sub">
+                  Add a video clip (.mp4, .mkv, .mov, .webm) into this folder, or uncheck &ldquo;Audio &amp; video in the same folder&rdquo; to browse a Video Clips folder.
+                </p>
+              </>
+            ) : scannedAudio.length === 0 && scannedVideo.length > 0 ? (
+              <>
+                <p className="text-sm font-black text-amber-700">
+                  Found {scannedVideo.length} video clip{scannedVideo.length === 1 ? '' : 's'}, but no audio tracks
+                </p>
+                <p className="nb-sub">
+                  Add audio tracks (.mp3, .wav, .flac, .m4a) into this folder, or select an Audio folder.
+                </p>
+              </>
+            ) : (
+              <div className="max-w-md mx-auto space-y-3">
+                <p className="text-sm font-black text-amber-800">
+                  No pairs matched using the &ldquo;{pairingMode === 'match_name' ? 'By Name' : pairingMode}&rdquo; rule
+                </p>
+                <p className="nb-sub">
+                  {scannedAudio.length} audio track{scannedAudio.length === 1 ? '' : 's'} and {scannedVideo.length} video clip{scannedVideo.length === 1 ? '' : 's'} were scanned, but their filenames didn't match. Switch to another pairing rule below to pair them instantly:
+                </p>
+                <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                  <button
+                    onClick={() => setPairingMode('order_1_to_1')}
+                    className="nb-btn nb-btn-sm nb-btn-yellow nb-press font-black"
+                  >
+                    Switch to 1 - 1 Rule
+                  </button>
+                  <button
+                    onClick={() => setPairingMode('cycle')}
+                    className="nb-btn nb-btn-sm nb-btn-cyan nb-press font-black"
+                  >
+                    Switch to Cycle Rule
+                  </button>
+                  <button
+                    onClick={() => setPairingMode('one_for_all')}
+                    className="nb-btn nb-btn-sm nb-btn-purple nb-press font-black"
+                  >
+                    Switch to One for All Rule
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto bg-white">
