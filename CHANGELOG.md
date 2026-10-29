@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ## [Unreleased]
 
+### Planned
+- (nothing yet)
+
+---
+
+## [0.6.24] - 2026-10-29
+
 ### Improved
 - **Authentic VHS & Surveillance Camera Aesthetic Effects**:
   - **Dynamic Periodic Static Bursts**: Fixed an issue where enabling "Periodic Tape Static Bursts" (`noise_static`) was bypassed whenever a preset already had base noise. Upgraded the static burst generator to inject realistic periodic magnetic static bursts with horizontal tracking tear glitches (`noise=alls=65:allf=t+u:enable='lt(mod(t\,4.5)\,0.35)',drawbox=y=ih-42:color=white@0.70:width=iw:height=4:t=fill:enable='lt(mod(t\,4.5)\,0.35)'`), delivering surreal, tactile tape tracking spikes every 4.5 seconds.
