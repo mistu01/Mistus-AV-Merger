@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ## [Unreleased]
 
+### Planned
+- (nothing yet)
+
+---
+
+## [0.6.22] - 2026-10-29
+
 ### Fixed
 - **Built-in Fallback for Preset Catalog in Frozen Executables**:
   - Fixed an issue where `PresetManager` failed to resolve `presets_v1.json` when running inside the compiled PyInstaller executable (due to `base_library.zip` bytecode packaging), returning `None` for all VHS presets and causing all VHS options to produce identical un-filtered output.
