@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ## [Unreleased]
 
+### Planned
+- (nothing yet)
+
+---
+
+## [0.6.20] - 2026-10-29
+
 ### Fixed
 - **Visual Effects & Image Overlay Propagation**:
   - Fixed an issue where re-queuing or adding jobs after tweaking visual effects or overlay settings failed to update existing jobs in the queue, causing them to render with stale options and bypass effects.
