@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ## [Unreleased]
 
+### Planned
+- (nothing yet)
+
+---
+
+## [0.6.25] - 2026-10-29
+
 ### Improved
 - **Distinct Visual Identities for All 7 Presets**:
   - Differentiated every preset to ensure completely unique, unmistakable visual characteristics doing true justice to their names:
