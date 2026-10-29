@@ -226,7 +226,7 @@ def test_build_reencode_render_bitrate_cap_nvenc_drops_cq():
         bitrate_kbps=400,
     )
     assert "-cq" not in cmd
-    assert cmd[cmd.index("-preset") + 1] == "p4"
+    assert cmd[cmd.index("-preset") + 1] == builder._NVENC_PRESET
     assert cmd[cmd.index("-b:v") + 1] == "400k"
     # Default audio bitrate when no tier audio given
     assert cmd[cmd.index("-b:a") + 1] == "192k"
@@ -300,4 +300,37 @@ def test_build_concat_and_mux_audio():
     assert "-c:v" in cmd and cmd[cmd.index("-c:v") + 1] == "copy"
     assert "-c:a" in cmd and cmd[cmd.index("-c:a") + 1] == "aac"
     assert cmd[cmd.index("-t") + 1] == "3600.000"
+
+
+def test_build_reencode_render_scene_encoders():
+    builder = FFmpegCommandBuilder(ffmpeg_bin="ffmpeg")
+    # libx265: 10-bit CRF 20
+    cmd_x265 = builder.build_reencode_render(
+        video_path=Path("/media/clip.mp4"),
+        audio_path=Path("/media/song.mp3"),
+        output_path=Path("/renders/output.mp4"),
+        encoder="libx265",
+    )
+    assert "-pix_fmt" in cmd_x265 and cmd_x265[cmd_x265.index("-pix_fmt") + 1] == "yuv420p10le"
+    assert "-crf" in cmd_x265 and cmd_x265[cmd_x265.index("-crf") + 1] == "20"
+
+    # libsvtav1: 10-bit CRF 24 preset 5
+    cmd_av1 = builder.build_reencode_render(
+        video_path=Path("/media/clip.mp4"),
+        audio_path=Path("/media/song.mp3"),
+        output_path=Path("/renders/output.mp4"),
+        encoder="libsvtav1",
+    )
+    assert "-pix_fmt" in cmd_av1 and cmd_av1[cmd_av1.index("-pix_fmt") + 1] == "yuv420p10le"
+    assert "-preset" in cmd_av1 and cmd_av1[cmd_av1.index("-preset") + 1] == "5"
+
+    # h264_qsv: lookahead and global_quality 18
+    cmd_qsv = builder.build_reencode_render(
+        video_path=Path("/media/clip.mp4"),
+        audio_path=Path("/media/song.mp3"),
+        output_path=Path("/renders/output.mp4"),
+        encoder="h264_qsv",
+    )
+    assert "-look_ahead" in cmd_qsv and cmd_qsv[cmd_qsv.index("-look_ahead") + 1] == "1"
+    assert "-global_quality" in cmd_qsv and cmd_qsv[cmd_qsv.index("-global_quality") + 1] == "18"
 

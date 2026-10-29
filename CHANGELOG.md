@@ -9,8 +9,32 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ## [Unreleased]
 
-### Planned
-- (nothing yet)
+### Fixed
+- **Queue Stop, Clear & Restart Lifecycle**:
+  - Fixed an issue where stopping an active render and clearing the queue could leave the render worker thread unresponsive or trying fallback encoders on dead processes.
+  - Added `_ensure_worker_running()` thread watchdog supervisor to guarantee the render worker daemon is continuously alive and ready.
+  - Wrapped `_render_worker_loop` with a top-level error shield so unhandled job or iteration exceptions can never terminate the worker loop.
+  - Added immediate bailout checks (`if not queue_mgr.is_running: return`) in all encode pipelines and fallback retries, halting ffmpeg instantly and aborting sub-phases.
+  - Updated `start_queue()` to automatically re-queue any `paused` or `failed` jobs and ensure the queue immediately resumes without requiring application restart.
+  - Updated frontend queue action dispatchers to immediately live-sync queue state after commands (`start`, `stop`, `clear`, `pause`, `resume`).
+
+### Added
+- **Manual Video Codec & Encoder Selection**:
+  - Added user-selectable video encoder options across Settings modal and Visual Effects Studio (Render Options tab).
+  - Defaults to `Auto` (automatically detecting and using the fastest GPU encoder on the machine).
+  - Allows full user freedom to override with H.264 (`libx264`), H.265 / HEVC (`libx265`), AV1 (`libsvtav1`), H.266 / VVC (`libvvenc`), or any detected GPU hardware encoders (`h264_nvenc`, `hevc_nvenc`, `av1_nvenc`, `h264_qsv`, `hevc_qsv`, `av1_qsv`, `h264_amf`, etc.).
+  - Persisted across app sessions and synced between frontend and backend.
+  - Header badge dynamically displays active encoder (`AUTO: H264_QSV`, `ENCODER: LIBX265`, `ENCODER: LIBSVTAV1`, etc.).
+
+### Improved
+- **Scene-Release Bluray-Rip Encoding Quality & Compression**:
+  - Re-architected encoder flags to match high-fidelity scene-release Blu-ray rip standards (sharp details, pristine gradients, zero macroblocking, compact sizes):
+    - `libx264`: Slow preset with CRF 18 visually lossless standard and full motion estimation.
+    - `libx265`: Medium preset with 10-bit color (`yuv420p10le`) and CRF 20, eliminating color/gradient banding in dark/night scenes.
+    - `libsvtav1`: SVT-AV1 preset 5 with 10-bit color (`yuv420p10le`) and CRF 24 (`tune=0`), delivering next-gen pristine compression.
+    - `libvvenc`: Fast preset with 10-bit color (`yuv420p10le`) and QP 24 for future-gen ultra efficiency.
+    - Hardware Encoders (`NVENC` / `QSV` / `AMF`): Enabled deep lookahead (`-look_ahead 1 -look_ahead_depth 24`), spatial & temporal adaptive quantization (`-spatial-aq 1 -temporal-aq 1`), high quality presets (`p6` / `slow`), and 10-bit color profiles for HEVC/AV1.
+  - Leverages Mistus AV Merger's fast-loop architecture: encodes the base clip once with pristine scene-release quality (~1-3 seconds) and instant stream-copies across the entire audio track duration at 50x-100x speed.
 
 ---
 

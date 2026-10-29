@@ -407,6 +407,7 @@ class SettingsUpdateRequest(BaseModel):
     cpu_profile: Optional[str] = None
     concurrency: Optional[int] = None
     segment_duration_sec: Optional[int] = None
+    selected_encoder: Optional[str] = None
 
 
 @app.get("/api/v1/settings")
@@ -436,10 +437,13 @@ def _needs_audio_transcode(audio_path: Path, output_path: Path) -> bool:
 
 
 def _pick_encoder() -> str:
-    """Resolves the best available (hardware-first)VIDEO encoder once.
+    """Resolves the active VIDEO encoder.
+    If the user has chosen a specific encoder in Settings (or options), that choice is used.
+    Otherwise defaults to the best probed hardware/CPU encoder."""
+    user_choice = str(settings_mgr.get("selected_encoder") or "auto").strip().lower()
+    if user_choice and user_choice != "auto":
+        return user_choice
 
-    Prefers the result of the startup background probe; only falls back to a
-    synchronous probe when that thread has not finished yet."""
     global _encoder_cache
     with _encoder_lock:
         if _encoder_cache is None:
@@ -632,6 +636,7 @@ def add_jobs(req: QueueAddRequest):
         queue_mgr.add_job(job)
         added.append(job.to_dict())
 
+    _ensure_worker_running()
     if req.auto_start and not queue_mgr.is_running and any(j.status == "queued" for j in queue_mgr.jobs):
         queue_mgr.is_running = True
 
@@ -641,6 +646,8 @@ def add_jobs(req: QueueAddRequest):
 def _execute_job(job: RenderJob):
     """Runs one render end-to-end, streaming ffmpeg's progress into the job."""
     global _active_job
+    if not queue_mgr.is_running:
+        return
     output = Path(job.output_path)
     audio = Path(job.audio_path)
     video = Path(job.video_path)
@@ -744,10 +751,12 @@ def _execute_job(job: RenderJob):
                     )
                     job.encoder = encoder
                     _run_render_process(job, cmd_a)
+                    if not queue_mgr.is_running:
+                        return
 
                     if job.status != "completed":
                         sw = _sw_fallback_encoder(encoder)
-                        if sw:
+                        if sw and queue_mgr.is_running:
                             job.logs.append(f"[warn] {encoder} failed; retrying with {sw}")
                             encoder = sw
                             job.encoder = encoder
@@ -771,7 +780,10 @@ def _execute_job(job: RenderJob):
                             )
                             _run_render_process(job, cmd_a)
 
-                    if job.status == "completed" and temp_seg_a.exists():
+                    if not queue_mgr.is_running:
+                        return
+
+                    if job.status == "completed" and temp_seg_a.exists() and queue_mgr.is_running:
                         # 2. Pre-render clean loop without overlay (clean_loop_dur seconds)
                         cmd_b_clean = ffmpeg_builder.build_filtered_loop_clip(
                             video_path=video,
@@ -791,7 +803,10 @@ def _execute_job(job: RenderJob):
                         )
                         _run_render_process(job, cmd_b_clean)
 
-                    if job.status == "completed" and temp_loop_clean.exists():
+                    if not queue_mgr.is_running:
+                        return
+
+                    if job.status == "completed" and temp_loop_clean.exists() and queue_mgr.is_running:
                         # 3. Stream-copy loop Segment B for remaining rem_dur
                         loop_count = max(1, ceil(rem_dur / clean_loop_dur - 1e-6))
                         copy_b_cmd = [
@@ -807,7 +822,10 @@ def _execute_job(job: RenderJob):
                         ]
                         _run_render_process(job, copy_b_cmd)
 
-                    if job.status == "completed" and temp_seg_b.exists():
+                    if not queue_mgr.is_running:
+                        return
+
+                    if job.status == "completed" and temp_seg_b.exists() and queue_mgr.is_running:
                         # 4. Concat A + B and mux with audio
                         concat_list.write_text(
                             f"file '{temp_seg_a.as_posix()}'\nfile '{temp_seg_b.as_posix()}'\n",
@@ -864,17 +882,22 @@ def _execute_job(job: RenderJob):
                     command = _build_loop_cmd(encoder)
                     job.encoder = encoder
                     _run_render_process(job, command)
+                    if not queue_mgr.is_running:
+                        return
 
                     if job.status != "completed":
                         sw = _sw_fallback_encoder(encoder)
-                        if sw:
+                        if sw and queue_mgr.is_running:
                             job.logs.append(f"[warn] {encoder} failed; retrying with {sw}")
                             encoder = sw
                             job.encoder = encoder
                             command = _build_loop_cmd(encoder)
                             _run_render_process(job, command)
 
-                    if job.status == "completed" and temp_loop.exists():
+                    if not queue_mgr.is_running:
+                        return
+
+                    if job.status == "completed" and temp_loop.exists() and queue_mgr.is_running:
                         job.logs.append(f"[info] Stream-copy looping across {audio_dur:.1f}s audio track...")
                         copy_cmd = ffmpeg_builder.build_stream_copy_loop(
                             video_path=temp_loop,
@@ -918,18 +941,22 @@ def _execute_job(job: RenderJob):
             command = _build_encode_command(encoder)
             fallbacks = 0
             while True:
+                if not queue_mgr.is_running:
+                    break
                 job.encoder = encoder
                 _run_render_process(job, command)
-                if job.status == "completed":
+                if job.status == "completed" or not queue_mgr.is_running:
                     break
                 sw = _sw_fallback_encoder(encoder)
-                if sw is None or fallbacks >= 1:
+                if sw is None or fallbacks >= 1 or not queue_mgr.is_running:
                     break
                 job.logs.append(f"[warn] {encoder} failed; retrying with {sw}")
                 encoder = sw
                 command = _build_encode_command(encoder)
                 fallbacks += 1
         else:
+            if not queue_mgr.is_running:
+                return
             video_dur = float(opts.get("video_duration_sec") or 0.0)
             command = ffmpeg_builder.build_stream_copy_loop(
                 video_path=video,
@@ -949,21 +976,31 @@ def _execute_job(job: RenderJob):
         with _active_lock:
             if _active_job is job:
                 _active_job = None
-        queue_mgr.save_session()
+        try:
+            queue_mgr.save_session()
+        except Exception as e:
+            print(f"[Warning] Failed to persist session: {e}")
 
 
 def _sw_fallback_encoder(encoder: str) -> Optional[str]:
     """Software encoder to retry with when a hardware encoder fails."""
-    if encoder.startswith("h264_"):
+    enc = encoder.lower()
+    if enc.startswith("h264_") or enc == "libx264":
         return "libx264"
-    if encoder.startswith("hevc_"):
-        return "libx264"
-    return None
+    if enc.startswith("hevc_") or enc in ("libx265", "libvvenc"):
+        return "libx265"
+    if enc.startswith("av1_") or enc == "libsvtav1":
+        return "libsvtav1"
+    return "libx264"
 
 
 def _run_render_process(job: RenderJob, command: List[str]):
     """Launches ffmpeg, streams progress into the job, sets the final status."""
     global _active_job
+    if not queue_mgr.is_running:
+        job.status = "failed"
+        return
+
     output = Path(command[-1])
 
     job.status = "rendering"
@@ -987,6 +1024,12 @@ def _run_render_process(job: RenderJob, command: List[str]):
         _active_job = job
 
     for line in proc.stdout:
+        if not queue_mgr.is_running:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+            break
         line = line.strip()
         if not line:
             continue
@@ -1020,6 +1063,10 @@ def _run_render_process(job: RenderJob, command: List[str]):
             job.logs.append(line)
 
     rc = proc.wait()
+    if not queue_mgr.is_running:
+        job.status = "failed"
+        return
+
     if rc == 0 and output.exists():
         job.status = "completed"
         job.progress = 100.0
@@ -1030,36 +1077,58 @@ def _run_render_process(job: RenderJob, command: List[str]):
         job.logs.append(f"[error] ffmpeg exited with code {rc}")
 
 
+_worker_thread: Optional[threading.Thread] = None
+_worker_lock = threading.Lock()
+
+
+def _ensure_worker_running():
+    """Supervises and ensures the render worker daemon thread is alive."""
+    global _worker_thread
+    with _worker_lock:
+        if _worker_thread is None or not _worker_thread.is_alive():
+            _worker_thread = threading.Thread(target=_render_worker_loop, name="render-worker", daemon=True)
+            _worker_thread.start()
+
+
 def _render_worker_loop():
     while True:
-        if not queue_mgr.is_running or queue_mgr.is_paused:
-            time.sleep(0.25)
-            continue
-        job = next((j for j in queue_mgr.jobs if j.status == "queued"), None)
-        if job is None:
-            time.sleep(0.25)
-            continue
-        _execute_job(job)
+        try:
+            if not queue_mgr.is_running or queue_mgr.is_paused:
+                time.sleep(0.25)
+                continue
+            jobs_snapshot = list(queue_mgr.jobs)
+            job = next((j for j in jobs_snapshot if j.status == "queued"), None)
+            if job is None:
+                time.sleep(0.25)
+                continue
+            _execute_job(job)
+        except Exception as exc:
+            print(f"[error] Render worker unhandled error: {exc}")
+            time.sleep(0.5)
 
 
-threading.Thread(target=_render_worker_loop, name="render-worker", daemon=True).start()
+_ensure_worker_running()
 
 
 @app.post("/api/v1/queue/start")
 def start_queue():
+    _ensure_worker_running()
     queue_mgr.is_running = True
     queue_mgr.is_paused = False
-    has_queued = any(j.status in ("queued", "paused") for j in queue_mgr.jobs)
+
+    has_queued = any(j.status == "queued" for j in queue_mgr.jobs)
     if not has_queued and queue_mgr.jobs:
-        # Starting queue 2nd or 3rd time with completed jobs:
-        # Re-queue so worker verifies files, rapidly skipping complete ones
+        # Re-queue paused, failed, or completed jobs so user can restart or retry
         for job in queue_mgr.jobs:
-            job.status = "queued"
-            job.progress = 0.0
+            if job.status in ("paused", "failed", "completed"):
+                job.status = "queued"
+                job.progress = 0.0
     else:
         for job in queue_mgr.jobs:
-            if job.status == "paused":
-                queue_mgr.resume_job(job.job_id)
+            if job.status in ("paused", "failed"):
+                job.status = "queued"
+                job.progress = 0.0
+
     queue_mgr.save_session()
     return {"status": "started", "queue": [j.to_dict() for j in queue_mgr.jobs]}
 
@@ -1126,6 +1195,7 @@ def stop_queue_immediately():
             _active_job = None
 
     queue_mgr.save_session()
+    _ensure_worker_running()
     return {"status": "stopped", "queue": [j.to_dict() for j in queue_mgr.jobs]}
 
 
@@ -1150,6 +1220,7 @@ def clear_all_jobs():
     stop_queue_immediately()
     queue_mgr.jobs.clear()
     queue_mgr.save_session()
+    _ensure_worker_running()
     return {"status": "cleared", "queue": []}
 
 

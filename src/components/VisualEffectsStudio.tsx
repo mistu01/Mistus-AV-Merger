@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { RenderOptions } from '../utils/engine';
 import { VHS_PRESETS } from '../data/presets';
+import type { HardwareSummary } from '../App';
 
 interface VisualEffectsStudioProps {
   renderOptions: RenderOptions;
@@ -31,6 +32,9 @@ interface VisualEffectsStudioProps {
   onClearOverlayFolder?: () => void;
   onOpenBrowser?: (target: 'single_image' | 'bulk_images') => void;
   onNavigateToTab?: (tab: 'single' | 'bulk' | 'queue') => void;
+  selectedEncoder?: string;
+  onSelectedEncoderChange?: (encoder: string) => void;
+  hwSummary?: HardwareSummary | null;
 }
 
 export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
@@ -41,6 +45,9 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
   onClearOverlayFolder,
   onOpenBrowser,
   onNavigateToTab,
+  selectedEncoder = 'auto',
+  onSelectedEncoderChange,
+  hwSummary,
 }) => {
   // Direct options bindings
   const vhsPreset = renderOptions.vhsPreset || 'none';
@@ -472,13 +479,18 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
 
         {/* Right Column: All Settings Controls */}
         <div className="lg:col-span-7 space-y-6">
-          {/* 1. Resolution & Output Size Target */}
+          {/* 1. Resolution, Quality & Video Encoder Target */}
           <div className="nb-card p-6 space-y-4">
-            <h4 className="nb-title text-sm flex items-center gap-2">
-              <Sliders className="w-4 h-4" /> Output Resolution &amp; Bitrate Target
+            <h4 className="nb-title text-sm flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <Sliders className="w-4 h-4" /> Output Resolution, Quality &amp; Codec
+              </span>
+              <span className="nb-badge nb-badge-lime font-mono text-[10px]">
+                {selectedEncoder === 'auto' ? `AUTO (${hwSummary?.recommended || 'GPU'})` : selectedEncoder.toUpperCase()}
+              </span>
             </h4>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-1.5">
                 <label className="nb-label">Resolution Scaling</label>
                 <select
@@ -486,20 +498,20 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
                   onChange={e => setRenderOptions(prev => ({ ...prev, resolution: e.target.value as any }))}
                   className="nb-select w-full"
                 >
-                  <option value="original">Original (allows fast stream copy)</option>
-                  <option value="1080p">1080p Full HD (1920x1080)</option>
-                  <option value="720p">720p HD (1280x720)</option>
-                  <option value="480p">480p SD (854x480)</option>
+                  <option value="original">Original (fast copy)</option>
+                  <option value="1080p">1080p Full HD</option>
+                  <option value="720p">720p HD</option>
+                  <option value="480p">480p SD</option>
                 </select>
                 <p className="nb-sub">
                   {resolution === 'original'
-                    ? 'Native resolution preserved; enables instant fast stream copy.'
-                    : 'Letterboxes and scales with Lanczos (requires re-encode).'}
+                    ? 'Native resolution preserved.'
+                    : 'Scales with Lanczos (re-encodes).'}
                 </p>
               </div>
 
               <div className="space-y-1.5">
-                <label className="nb-label">Output File Size Target</label>
+                <label className="nb-label">File Size Target</label>
                 <select
                   value={sizeTarget}
                   onChange={e => setRenderOptions(prev => ({ ...prev, sizeTarget: e.target.value as any }))}
@@ -508,12 +520,48 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
                   <option value="small">Small ~250 MB/hr</option>
                   <option value="balanced">Balanced ~325 MB/hr</option>
                   <option value="high">High ~400 MB/hr</option>
-                  <option value="unlimited">Max Quality (CRF 21, no size cap)</option>
+                  <option value="unlimited">Max Quality (CRF/Lossless)</option>
                 </select>
                 <p className="nb-sub">
                   {sizeTarget === 'unlimited'
-                    ? 'Highest visual quality with variable bitrate (when re-encoding).'
-                    : 'Caps file size per hour of audio when re-encoding.'}
+                    ? 'Visual scene fidelity without size cap.'
+                    : 'Predictable file size per hour.'}
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="nb-label">Video Encoder</label>
+                <select
+                  value={selectedEncoder}
+                  onChange={e => {
+                    if (onSelectedEncoderChange) onSelectedEncoderChange(e.target.value);
+                  }}
+                  className="nb-select w-full font-bold"
+                >
+                  <option value="auto">
+                    Auto ({hwSummary?.recommended || 'Hardware GPU'})
+                  </option>
+                  <optgroup label="Hardware GPU">
+                    {hwSummary?.encoders?.h264_nvenc && <option value="h264_nvenc">NVENC H.264</option>}
+                    {hwSummary?.encoders?.hevc_nvenc && <option value="hevc_nvenc">NVENC HEVC</option>}
+                    {hwSummary?.encoders?.av1_nvenc && <option value="av1_nvenc">NVENC AV1</option>}
+                    {hwSummary?.encoders?.h264_qsv && <option value="h264_qsv">QuickSync H.264</option>}
+                    {hwSummary?.encoders?.hevc_qsv && <option value="hevc_qsv">QuickSync HEVC</option>}
+                    {hwSummary?.encoders?.av1_qsv && <option value="av1_qsv">QuickSync AV1</option>}
+                    {hwSummary?.encoders?.h264_amf && <option value="h264_amf">AMD AMF H.264</option>}
+                    {hwSummary?.encoders?.hevc_amf && <option value="hevc_amf">AMD AMF HEVC</option>}
+                    {hwSummary?.encoders?.h264_videotoolbox && <option value="h264_videotoolbox">Apple H.264</option>}
+                    {hwSummary?.encoders?.hevc_videotoolbox && <option value="hevc_videotoolbox">Apple HEVC</option>}
+                  </optgroup>
+                  <optgroup label="CPU Standards">
+                    <option value="libx264">H.264 (libx264 CRF 18)</option>
+                    <option value="libx265">H.265 (libx265 10-Bit)</option>
+                    <option value="libsvtav1">AV1 (libsvtav1 10-Bit)</option>
+                    {hwSummary?.encoders?.libvvenc && <option value="libvvenc">H.266 (libvvenc 10-Bit)</option>}
+                  </optgroup>
+                </select>
+                <p className="nb-sub">
+                  GPU hardware by default; or pick H.264, H.265, AV1, or H.266.
                 </p>
               </div>
             </div>

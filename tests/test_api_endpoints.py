@@ -103,3 +103,44 @@ def test_queue_add_updates_existing_job_options(tmp_path):
     assert updated_job.options.get("vhsPreset") == "clean_vhs"
     assert updated_job.options.get("overlayPath") == str(img)
     assert updated_job.options.get("overlayAnimation") == "bounce"
+
+
+def test_queue_stop_clear_readd_start_lifecycle(tmp_path):
+    from mistus_av_merger.api.app import start_queue
+    clear_all_jobs()
+    audio = tmp_path / "song.mp3"
+    audio.write_bytes(b"\x00" * 100)
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"\x00" * 100)
+    out = tmp_path / "out.mp4"
+
+    # 1. Add job & start
+    add_jobs(QueueAddRequest(
+        jobs=[{"audio_path": str(audio), "video_path": str(video), "output_path": str(out), "mode": "copy", "duration": 10.0}],
+        auto_start=False,
+    ))
+    assert len(queue_mgr.jobs) == 1
+    start_queue()
+    assert queue_mgr.is_running is True
+
+    # 2. Stop queue
+    stop_queue_immediately()
+    assert queue_mgr.is_running is False
+
+    # 3. Clear queue
+    clear_all_jobs()
+    assert len(queue_mgr.jobs) == 0
+
+    # 4. Re-add jobs
+    add_jobs(QueueAddRequest(
+        jobs=[{"audio_path": str(audio), "video_path": str(video), "output_path": str(out), "mode": "copy", "duration": 10.0}],
+        auto_start=False,
+    ))
+    assert len(queue_mgr.jobs) == 1
+    assert queue_mgr.jobs[0].status == "queued"
+
+    # 5. Start queue again
+    start_res = start_queue()
+    assert queue_mgr.is_running is True
+    assert start_res["status"] == "started"
+    assert queue_mgr.jobs[0].status == "queued"

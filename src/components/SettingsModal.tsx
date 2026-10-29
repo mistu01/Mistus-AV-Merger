@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { Settings, Cpu, HardDrive, Check, X, Zap } from 'lucide-react';
+import { Settings, Cpu, HardDrive, Check, X, Zap, Sliders } from 'lucide-react';
 import type { HardwareSummary } from '../App';
 
 interface SettingsModalProps {
@@ -21,6 +21,8 @@ interface SettingsModalProps {
   segmentDuration: number;
   setSegmentDuration: (sec: number) => void;
   hwSummary: HardwareSummary | null;
+  selectedEncoder: string;
+  onSelectedEncoderChange: (encoder: string) => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -33,6 +35,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   segmentDuration,
   setSegmentDuration,
   hwSummary,
+  selectedEncoder,
+  onSelectedEncoderChange,
 }) => {
   if (!isOpen) return null;
 
@@ -75,6 +79,50 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <p className="font-mono text-[11px] font-bold break-all">{hwLine}</p>
             <p className="text-[10px] font-semibold text-black/50">
               Encodes automatically use the best GPU encoder found (NVENC / AMF / QuickSync), falling back to CPU x264.
+            </p>
+          </div>
+
+          {/* Encoder Selection */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="nb-label flex items-center gap-1.5">
+                <Sliders className="w-4 h-4" /> Video Codec / Encoder
+              </label>
+              <span className="nb-badge nb-badge-lime font-mono">
+                {selectedEncoder === 'auto' ? `AUTO (${hwSummary?.recommended || 'DETECTING'})` : selectedEncoder.toUpperCase()}
+              </span>
+            </div>
+            <select
+              value={selectedEncoder}
+              onChange={e => onSelectedEncoderChange(e.target.value)}
+              className="nb-select w-full font-bold"
+            >
+              <option value="auto">
+                Auto-Select: {hwSummary?.recommended ? `${hwSummary.recommended} (${hwSummary.gpu_brand})` : 'Hardware / Best Viable'}
+              </option>
+              <optgroup label="Hardware GPU Encoders">
+                {hwSummary?.encoders?.h264_nvenc && <option value="h264_nvenc">NVIDIA NVENC H.264 (CUDA)</option>}
+                {hwSummary?.encoders?.hevc_nvenc && <option value="hevc_nvenc">NVIDIA NVENC HEVC / H.265 (CUDA)</option>}
+                {hwSummary?.encoders?.av1_nvenc && <option value="av1_nvenc">NVIDIA NVENC AV1 (RTX 40-series+)</option>}
+                {hwSummary?.encoders?.h264_qsv && <option value="h264_qsv">Intel QuickSync H.264 (QSV)</option>}
+                {hwSummary?.encoders?.hevc_qsv && <option value="hevc_qsv">Intel QuickSync HEVC / H.265 (QSV)</option>}
+                {hwSummary?.encoders?.av1_qsv && <option value="av1_qsv">Intel QuickSync AV1 (QSV)</option>}
+                {hwSummary?.encoders?.h264_amf && <option value="h264_amf">AMD AMF H.264 (Radeon)</option>}
+                {hwSummary?.encoders?.hevc_amf && <option value="hevc_amf">AMD AMF HEVC / H.265 (Radeon)</option>}
+                {hwSummary?.encoders?.h264_videotoolbox && <option value="h264_videotoolbox">Apple VideoToolbox H.264</option>}
+                {hwSummary?.encoders?.hevc_videotoolbox && <option value="hevc_videotoolbox">Apple VideoToolbox HEVC</option>}
+              </optgroup>
+              <optgroup label="High-Fidelity CPU Encoders (Universal Scene Standards)">
+                <option value="libx264">H.264 / AVC (libx264) - Maximum Universal Compatibility (Slow CRF 18)</option>
+                <option value="libx265">H.265 / HEVC (libx265) - 10-Bit Pristine Compression (CRF 20)</option>
+                <option value="libsvtav1">AV1 (libsvtav1) - Next-Gen Ultra Efficiency (10-Bit Preset 5)</option>
+                {hwSummary?.encoders?.libvvenc && (
+                  <option value="libvvenc">H.266 / VVC (libvvenc) - Future-Gen Compact (10-Bit Fast QP 24)</option>
+                )}
+              </optgroup>
+            </select>
+            <p className="nb-sub">
+              By default, Mistus selects your fastest GPU hardware encoder. You can override it anytime with H.264, H.265, AV1, or H.266.
             </p>
           </div>
 

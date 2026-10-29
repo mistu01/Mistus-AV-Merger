@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Header } from './components/Header';
 import { SingleRenderView } from './components/SingleRenderView';
 import { BulkScanView } from './components/BulkScanView';
@@ -35,11 +35,25 @@ export interface HardwareSummary {
   is_hardware_accelerated: boolean;
   probed: boolean;
   probing: boolean;
+  encoders?: Record<string, boolean>;
 }
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'single' | 'bulk' | 'queue' | 'effects'>('single');
   const [appVersion, setAppVersion] = useState('...');
+
+  // User-selected video encoder ('auto' or specific e.g. 'libx265', 'libsvtav1', 'h264_qsv')
+  const [selectedEncoder, setSelectedEncoder] = useState<string>(() => {
+    try { return localStorage.getItem('mistus_selected_encoder') || 'auto'; } catch { return 'auto'; }
+  });
+
+  const handleSelectedEncoderChange = (enc: string) => {
+    setSelectedEncoder(enc);
+    try {
+      localStorage.setItem('mistus_selected_encoder', enc);
+    } catch {}
+    updateSettings({ selected_encoder: enc });
+  };
 
   // Media selections (probe data from the real backend)
   const [selectedAudio, setSelectedAudio] = useState<MediaProbe | null>(null);
@@ -154,6 +168,7 @@ export default function App() {
         if (appSettings.cpu_profile) setCpuProfile(appSettings.cpu_profile);
         if (appSettings.concurrency) setConcurrency(appSettings.concurrency);
         if (appSettings.segment_duration_sec) setSegmentDuration(appSettings.segment_duration_sec);
+        if (appSettings.selected_encoder) setSelectedEncoder(appSettings.selected_encoder);
 
         if (appSettings.last_single_audio) {
           fetch(`${API}/api/v1/fs/probe`, {
@@ -386,17 +401,34 @@ export default function App() {
       ...(bulkFolder ? { overlay_folder: bulkFolder } : {}),
       options: {
         ...renderOptions,
+        ...(selectedEncoder !== 'auto' ? { encoder: selectedEncoder } : {}),
         ...(bulkFolder ? { overlayFolder: bulkFolder } : {}),
       },
     };
   };
+
+  const syncQueue = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/api/v1/queue`);
+      if (!res.ok) return;
+      const data = (await res.json()) as Array<Record<string, unknown>>;
+      const mapped = mapBackendJobs(data);
+      setJobs(prev => (JSON.stringify(prev) === JSON.stringify(mapped) ? prev : mapped));
+    } catch {
+      /* server may be closed between renders */
+    }
+  }, []);
 
   const postQueueCommand = (path: string, body?: Record<string, unknown>) => {
     fetch(`${API}/api/v1/queue/${path}`, {
       method: 'POST',
       headers: body ? { 'Content-Type': 'application/json' } : undefined,
       body: body ? JSON.stringify(body) : undefined,
-    }).catch(() => undefined);
+    })
+      .then(() => {
+        setTimeout(() => { void syncQueue(); }, 120);
+      })
+      .catch(() => undefined);
   };
 
   const handleAddSingleToQueue = async (jobData: {
@@ -463,29 +495,24 @@ export default function App() {
   // Queue state live-syncs from the backend worker
   useEffect(() => {
     let stopped = false;
-    const sync = async () => {
-      try {
-        const res = await fetch(`${API}/api/v1/queue`);
-        if (!res.ok) return;
-        const data = (await res.json()) as Array<Record<string, unknown>>;
-        if (stopped) return;
-        const mapped = mapBackendJobs(data);
-        setJobs(prev => (JSON.stringify(prev) === JSON.stringify(mapped) ? prev : mapped));
-      } catch {
-        /* server may be closed between renders */
-      }
+    const tick = () => {
+      if (!stopped) void syncQueue();
     };
-    sync();
-    const timer = window.setInterval(sync, 1500);
+    tick();
+    const timer = window.setInterval(tick, 1500);
     return () => {
       stopped = true;
       window.clearInterval(timer);
     };
-  }, []);
+  }, [syncQueue]);
 
-  const handleStartAll = () => postQueueCommand('start');
+  const handleStartAll = () => {
+    postQueueCommand('start');
+  };
 
-  const handleStopAll = () => postQueueCommand('stop-all');
+  const handleStopAll = () => {
+    postQueueCommand('stop-all');
+  };
 
   const handlePauseAll = () => postQueueCommand('pause');
 
@@ -499,6 +526,7 @@ export default function App() {
     if (window.confirm('Are you sure you want to clear all jobs from the queue?')) {
       postQueueCommand('clear');
       setJobs([]);
+      setTimeout(() => { void syncQueue(); }, 100);
     }
   };
 
@@ -528,7 +556,11 @@ export default function App() {
         setActiveTab={setActiveTab}
         queueCount={jobs.filter(j => j.status === 'queued' || j.status === 'rendering').length}
         activeJobsCount={jobs.filter(j => j.status === 'rendering').length}
-        gpuName={hwSummary ? `ENCODER: ${hwSummary.recommended}` : 'ENCODER: PROBING...'}
+        gpuName={
+          selectedEncoder !== 'auto'
+            ? `ENCODER: ${selectedEncoder.toUpperCase()}`
+            : (hwSummary ? `AUTO: ${hwSummary.recommended.toUpperCase()}` : 'ENCODER: PROBING...')
+        }
         onOpenDiagnostics={() => setIsDiagnosticsOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenAbout={() => setIsAboutOpen(true)}
@@ -592,6 +624,9 @@ export default function App() {
               }
             }}
             onNavigateToTab={tab => setActiveTab(tab)}
+            selectedEncoder={selectedEncoder}
+            onSelectedEncoderChange={handleSelectedEncoderChange}
+            hwSummary={hwSummary}
           />
         )}
 
@@ -664,6 +699,8 @@ export default function App() {
           updateSettings({ segment_duration_sec: sec });
         }}
         hwSummary={hwSummary}
+        selectedEncoder={selectedEncoder}
+        onSelectedEncoderChange={handleSelectedEncoderChange}
       />
 
       <AboutModal
