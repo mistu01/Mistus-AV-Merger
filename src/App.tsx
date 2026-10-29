@@ -303,6 +303,32 @@ export default function App() {
     }
   };
 
+  const mapBackendJobs = (data: Array<Record<string, unknown>>): RenderJob[] => {
+    return data.map(j => {
+      const audioPath = String(j.audioPath || '');
+      const videoPath = String(j.videoPath || '');
+      const outputPath = String(j.outputPath || '');
+      return {
+        id: String(j.id),
+        audioName: audioPath.split(/[\\/]/).pop() || audioPath,
+        videoName: videoPath.split(/[\\/]/).pop() || videoPath,
+        outputName: outputPath.split(/[\\/]/).pop() || outputPath,
+        duration: Number(j.duration) || 0,
+        mode: j.mode === 'encode' ? 'encode' : 'copy',
+        modeReason: String(j.modeReason || ''),
+        encoder: String(j.encoder || ''),
+        status: String(j.status) as RenderJob['status'],
+        progress: Number(j.progress) || 0,
+        fps: Number(j.fps) || 0,
+        speed: String(j.speed || '-'),
+        etaSeconds: Number(j.etaSeconds) || 0,
+        currentSegment: Number(j.currentSegment) || 1,
+        totalSegments: Number(j.totalSegments) || 1,
+        logs: Array.isArray(j.logs) ? (j.logs as string[]) : [],
+      };
+    });
+  };
+
   // Spawn payload row sent to the backend queue
   const buildQueuePayload = (
     audio: MediaProbe,
@@ -311,6 +337,7 @@ export default function App() {
     mode: 'copy' | 'encode',
     modeReason: string,
     overlayFolder?: string,
+    explicitOutputDir?: string,
   ) => {
     const hasEffects = Boolean(
       (renderOptions.resolution && renderOptions.resolution !== 'original') ||
@@ -322,10 +349,13 @@ export default function App() {
     const effectiveMode = hasEffects ? 'encode' : mode;
     const effectiveReason = hasEffects ? 'Visual effects active (re-encode required)' : modeReason;
 
+    const baseParent = audio.path.replace(/[\\/][^\\/]+$/, '');
+    const outDir = (explicitOutputDir || outputFolder || `${baseParent}/MistusRenders`).replace(/[\\/]+$/, '');
+
     return {
       audio_path: audio.path,
       video_path: video.path,
-      output_path: `${outputFolder.replace(/[\\/]+$/, '')}/${outputName}`,
+      output_path: `${outDir}/${outputName}`,
       mode: effectiveMode,
       mode_reason: effectiveReason,
       duration: audio.duration,
@@ -345,7 +375,7 @@ export default function App() {
     }).catch(() => undefined);
   };
 
-  const handleAddSingleToQueue = (jobData: {
+  const handleAddSingleToQueue = async (jobData: {
     audio: MediaProbe;
     video: MediaProbe;
     outputName: string;
@@ -353,28 +383,57 @@ export default function App() {
     mode: 'copy' | 'encode';
     modeReason: string;
   }) => {
-    const payload = buildQueuePayload(
-      jobData.audio, jobData.video, jobData.outputName, jobData.mode, jobData.modeReason,
-    );
-    fetch(`${API}/api/v1/queue/add`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jobs: [payload], skip_existing: true }),
-    }).catch(() => undefined);
-    setActiveTab('queue');
+    try {
+      const payload = buildQueuePayload(
+        jobData.audio, jobData.video, jobData.outputName, jobData.mode, jobData.modeReason,
+      );
+      const res = await fetch(`${API}/api/v1/queue/add`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobs: [payload], skip_existing: false }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        alert(err?.detail || `Failed to add job to queue (${res.status})`);
+        return;
+      }
+      const data = await res.json();
+      if (Array.isArray(data.queue)) {
+        setJobs(mapBackendJobs(data.queue));
+      }
+      setActiveTab('queue');
+    } catch (e: any) {
+      alert(`Network error: ${e.message}`);
+    }
   };
 
-  const handleQueueBatch = (pairings: PairingResult[]) => {
-    const folder = renderOptions.overlayEnabled ? overlayImageFolder : '';
-    const payload = pairings.map(p =>
-      buildQueuePayload(p.audio, p.video, p.outputName, p.mode, p.modeReason, folder || undefined),
-    );
-    fetch(`${API}/api/v1/queue/add`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jobs: payload, skip_existing: true }),
-    }).catch(() => undefined);
-    setActiveTab('queue');
+  const handleQueueBatch = async (pairings: PairingResult[]) => {
+    if (!pairings || pairings.length === 0) return;
+    try {
+      const folder = renderOptions.overlayEnabled ? overlayImageFolder : '';
+      const targetOut = outputFolder || (audioFolder ? `${audioFolder.replace(/[\\/]+$/, '')}/MistusRenders` : '');
+      const payload = pairings.map(p => {
+        const outDir = targetOut || p.audio.path.replace(/[\\/][^\\/]+$/, '') + '/MistusRenders';
+        return buildQueuePayload(p.audio, p.video, p.outputName, p.mode, p.modeReason, folder || undefined, outDir);
+      });
+      const res = await fetch(`${API}/api/v1/queue/add`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobs: payload, skip_existing: false }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        alert(err?.detail || `Failed to queue jobs (${res.status})`);
+        return;
+      }
+      const data = await res.json();
+      if (Array.isArray(data.queue)) {
+        setJobs(mapBackendJobs(data.queue));
+      }
+      setActiveTab('queue');
+    } catch (e: any) {
+      alert(`Network error while queueing jobs: ${e.message}`);
+    }
   };
 
   // Queue state live-syncs from the backend worker
@@ -386,29 +445,7 @@ export default function App() {
         if (!res.ok) return;
         const data = (await res.json()) as Array<Record<string, unknown>>;
         if (stopped) return;
-        const mapped: RenderJob[] = data.map(j => {
-          const audioPath = String(j.audioPath || '');
-          const videoPath = String(j.videoPath || '');
-          const outputPath = String(j.outputPath || '');
-          return {
-            id: String(j.id),
-            audioName: audioPath.split(/[\\/]/).pop() || audioPath,
-            videoName: videoPath.split(/[\\/]/).pop() || videoPath,
-            outputName: outputPath.split(/[\\/]/).pop() || outputPath,
-            duration: Number(j.duration) || 0,
-            mode: j.mode === 'encode' ? 'encode' : 'copy',
-            modeReason: String(j.modeReason || ''),
-            encoder: String(j.encoder || ''),
-            status: String(j.status) as RenderJob['status'],
-            progress: Number(j.progress) || 0,
-            fps: Number(j.fps) || 0,
-            speed: String(j.speed || '-'),
-            etaSeconds: Number(j.etaSeconds) || 0,
-            currentSegment: Number(j.currentSegment) || 1,
-            totalSegments: Number(j.totalSegments) || 1,
-            logs: Array.isArray(j.logs) ? (j.logs as string[]) : [],
-          };
-        });
+        const mapped = mapBackendJobs(data);
         setJobs(prev => (JSON.stringify(prev) === JSON.stringify(mapped) ? prev : mapped));
       } catch {
         /* server may be closed between renders */

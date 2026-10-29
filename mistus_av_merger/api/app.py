@@ -501,27 +501,29 @@ def _resolve_job_overlay(raw: Dict[str, Any], options: Dict[str, Any], mode: str
     `overlay_folder` (bulk mode) from which ONE image is drawn at random for
     this specific job. Returns (resolved_path_or_empty, adjusted_mode).
     """
+    if not options.get("overlayEnabled"):
+        return "", mode
+
     overlay_path = str(options.get("overlayPath") or "").strip()
-    overlay_folder = str(raw.get("overlay_folder") or "").strip()
+    overlay_folder = str(raw.get("overlay_folder") or options.get("overlayFolder") or "").strip()
 
     if overlay_folder:
         folder = Path(overlay_folder)
-        if not folder.is_dir():
-            raise HTTPException(status_code=400, detail=f"Overlay image folder not found: {folder}")
-        images = sorted(
-            p for p in folder.iterdir()
-            if p.suffix.lower() in _IMAGE_EXTS and p.is_file()
-        )
-        if not images:
-            raise HTTPException(status_code=400, detail=f"No overlay images found in: {folder}")
-        overlay_path = str(random.choice(images))
+        if folder.is_dir():
+            images = sorted(
+                p for p in folder.iterdir()
+                if p.suffix.lower() in _IMAGE_EXTS and p.is_file()
+            )
+            if images:
+                overlay_path = str(random.choice(images))
 
     if overlay_path:
-        if not Path(overlay_path).exists():
-            raise HTTPException(status_code=400, detail=f"Overlay image not found: {overlay_path}")
-        if mode == "copy":
-            # Stream copy cannot burn an overlay; force a re-encode.
-            mode = "encode"
+        if Path(overlay_path).exists():
+            if mode == "copy":
+                # Stream copy cannot burn an overlay; force a re-encode.
+                mode = "encode"
+        else:
+            overlay_path = ""
     return overlay_path, mode
 
 
@@ -543,12 +545,14 @@ def add_jobs(req: QueueAddRequest):
 
         # 2. Prevent duplicate active jobs if already tracked in queue
         existing = next(
-            (j for j in queue_mgr.jobs if j.output_path == str(output_path) or
-             (j.audio_path == str(audio_path) and j.video_path == str(video_path))),
+            (j for j in queue_mgr.jobs if j.output_path == str(output_path)),
             None
         )
         if existing:
-            if existing.status in ("rendering", "queued"):
+            if existing.status == "queued":
+                existing.mode = str(raw.get("mode") or existing.mode)
+                existing.mode_reason = str(raw.get("mode_reason") or existing.mode_reason)
+                added.append(existing.to_dict())
                 continue
             elif existing.status in ("failed", "completed"):
                 existing.status = "queued"
@@ -556,11 +560,17 @@ def add_jobs(req: QueueAddRequest):
                 existing.logs.append("[info] Re-queued by user.")
                 added.append(existing.to_dict())
                 continue
+            elif existing.status == "rendering":
+                continue
 
         if not audio_path.exists():
             raise HTTPException(status_code=400, detail=f"Audio file not found: {audio_path}")
         if not video_path.exists():
             raise HTTPException(status_code=400, detail=f"Video file not found: {video_path}")
+
+        # Guard against empty/root output_path
+        if not output_path.parent or str(output_path.parent) in ("\\", "/", "."):
+            output_path = audio_path.parent / "MistusRenders" / output_path.name
 
         try:
             output_path.parent.mkdir(parents=True, exist_ok=True)

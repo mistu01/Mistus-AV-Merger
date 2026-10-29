@@ -9,8 +9,15 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ## [Unreleased]
 
-### Planned
-- (nothing yet)
+### Fixed
+- **Queue Remaining & Queue All Execution**:
+  - Fixed an issue where clicking "Queue Remaining" failed to queue scanned items due to missing output directory paths defaulting to root, unhandled asynchronous network requests, and hardcoded `skip_existing: true`.
+  - Added safe fallback to `[AudioFolder]/MistusRenders` so output paths are always valid directories.
+  - Added immediate local queue state synchronization from server response upon clicking "Queue Remaining" or "Queue All", eliminating UI latency.
+  - Added a dedicated "Queue All" button alongside "Queue Remaining" in the Bulk Scan view, enabling one-click queuing of all scanned pairs.
+  - Added an inline "Re-render All" toggle to the resume scan banner to allow re-rendering existing files without manual checkbox toggles.
+  - Fixed backend `_resolve_job_overlay` to safely bypass image checks when overlay is disabled, preventing 400 errors from blocking entire job batches.
+  - Stabilized pairing IDs to deterministic keys so row exclusions and video overrides persist cleanly across React re-renders.
 
 ---
 

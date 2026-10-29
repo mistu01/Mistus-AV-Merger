@@ -426,8 +426,12 @@ export function autoPair(
 
     const loopCount = video.duration > 0 ? parseFloat((audio.duration / video.duration).toFixed(2)) : 1;
 
+    const safeAudioKey = audio.filename.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const safeVideoKey = video.filename.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const stableId = `pair_${index}_${safeAudioKey}_${safeVideoKey}`;
+
     return {
-      id: `pair_${index}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      id: stableId,
       audio,
       video,
       outputName,

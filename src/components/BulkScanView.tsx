@@ -135,8 +135,9 @@ export const BulkScanView: React.FC<BulkScanViewProps> = ({
   };
 
   React.useEffect(() => {
-    refreshExistingOutputs(outputFolder);
-  }, [outputFolder]);
+    const target = outputFolder || (audioFolder ? `${audioFolder.replace(/[\\/]+$/, '')}/MistusRenders` : '');
+    refreshExistingOutputs(target);
+  }, [outputFolder, audioFolder]);
 
   const handleScan = async () => {
     setIsScanning(true);
@@ -424,7 +425,12 @@ export const BulkScanView: React.FC<BulkScanViewProps> = ({
           <div className="space-y-1.5">
             <span className="nb-label">Rendered Videos Go To</span>
             <div className="flex gap-2">
-              <input type="text" readOnly value={outputFolder} className="nb-input nb-input-readonly w-full text-[11px]" />
+              <input
+                type="text"
+                readOnly
+                value={outputFolder || (audioFolder ? `${audioFolder.replace(/[\\/]+$/, '')}/MistusRenders` : '')}
+                className="nb-input nb-input-readonly w-full text-[11px]"
+              />
               <button onClick={() => onOpenFolderBrowser('output')} className="nb-btn nb-btn-lime nb-press shrink-0">
                 Browse
               </button>
@@ -653,9 +659,17 @@ export const BulkScanView: React.FC<BulkScanViewProps> = ({
                 {skipAlreadyDone ? ' Skipped automatically so you only render what is left.' : ' Re-rendering enabled.'}
               </span>
             </div>
-            <span className="text-[11px] font-mono font-bold text-black/70">
-              {plan.pairings.length - alreadyDoneCount} remaining
-            </span>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => handleToggleSkipAlreadyDone(!skipAlreadyDone)}
+                className="nb-btn nb-btn-xs nb-btn-white nb-press text-[10px]"
+              >
+                {skipAlreadyDone ? 'Re-render All' : 'Skip Existing'}
+              </button>
+              <span className="text-[11px] font-mono font-bold text-black/70">
+                {plan.pairings.length - alreadyDoneCount} remaining
+              </span>
+            </div>
           </div>
         )}
 
@@ -816,18 +830,31 @@ export const BulkScanView: React.FC<BulkScanViewProps> = ({
               <Download className="w-3.5 h-3.5" /> JSON
             </button>
             <span className="text-[11px] font-bold hidden sm:inline">
-              {activePairingsCount} pair{activePairingsCount === 1 ? '' : 's'} &rarr; {outputFolder}
+              {activePairingsCount} of {plan.pairings.length} selected &rarr; {outputFolder || (audioFolder ? `${audioFolder.replace(/[\\/]+$/, '')}/MistusRenders` : 'MistusRenders')}
             </span>
           </div>
 
-          <button
-            onClick={() => onQueueBatch(plan.pairings.filter(p => !p.excluded))}
-            disabled={activePairingsCount === 0}
-            className="nb-btn nb-btn-lg nb-btn-yellow nb-press w-full sm:w-auto"
-          >
-            <ListPlus className="w-4 h-4" />
-            <span>Queue Remaining ({activePairingsCount} Jobs)</span>
-          </button>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            {plan.pairings.length > activePairingsCount && (
+              <button
+                onClick={() => onQueueBatch(plan.pairings)}
+                disabled={plan.pairings.length === 0}
+                className="nb-btn nb-btn-lg nb-btn-white nb-press flex-1 sm:flex-initial"
+                title="Queue all scanned pairings including already done or excluded rows"
+              >
+                <span>Queue All ({plan.pairings.length} Jobs)</span>
+              </button>
+            )}
+
+            <button
+              onClick={() => onQueueBatch(plan.pairings.filter(p => !p.excluded))}
+              disabled={activePairingsCount === 0}
+              className="nb-btn nb-btn-lg nb-btn-yellow nb-press flex-1 sm:flex-initial"
+            >
+              <ListPlus className="w-4 h-4" />
+              <span>Queue Remaining ({activePairingsCount} Jobs)</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
