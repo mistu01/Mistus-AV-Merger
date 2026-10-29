@@ -9,8 +9,20 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ## [Unreleased]
 
-### Planned
-- (nothing yet)
+### Improved
+- **Distinct Visual Identities for All 7 Presets**:
+  - Differentiated every preset to ensure completely unique, unmistakable visual characteristics doing true justice to their names:
+    - `clean_vhs`: Standard Play (SP) commercial tape with gentle tape softening, vintage tape warmth, mild luma grain, and subtle overscan line. Clean, nostalgic analog look without harsh glitches or scanlines.
+    - `worn_tape`: Aging magnetic tape with yellowed/sepia oxidation balance (`colorchannelmixer`), soft magnetic flutter, visible tape noise, and lower-third head-switching drift.
+    - `tracking_errors`: Severe VCR head misalignment featuring active horizontal static tearing bands slicing through the frame, thick head-switching glitches, sync tearing jitter lines, and heavy tape static.
+    - `chroma_bleed`: Extreme RCA composite analog cable color misregistration with massive red/cyan color displacement bleeding out of objects and hyper-saturated halos. No dark glitch bars.
+    - `camcorder_90s`: Handheld 90s home video camcorder with warm tungsten incandescent indoor lighting, sharp CCD sensor edge sharpening, CRT interlace lines, and camera master vibrancy. No tracking bars.
+    - `security_cam`: Authentic surveillance footage featuring 12 FPS surveillance cadence, high-contrast monochrome with eerie green phosphor monitor glow, convex security lens vignette, and CCD sensor noise.
+    - `heavy_degradation`: Total tape decay and found footage horror featuring extreme horizontal blur smear, massive static snowstorm, severe tape tears, and degraded muddy luma.
+- **Pure Darkening Night Mode**:
+  - Simplified Night Mode to purely and cleanly darken footage (`eq=brightness:gamma`) without applying unwanted blue color tints, forced noise, or vignette. Preserves the natural colors of the underlying video and retro presets while smoothly darkening from subtle evening dimming to pitch darkness.
+- **Studio Preview Alignment**:
+  - Removed artificial blue sky and cold washes from the Visual Effects Studio canvas so previewed footage reflects true colors under Night Mode and accurately showcases each preset's unique aesthetic identity.
 
 ---
 

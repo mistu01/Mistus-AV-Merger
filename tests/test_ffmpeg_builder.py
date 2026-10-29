@@ -133,7 +133,7 @@ def test_build_reencode_render_with_filters():
     idx_vf = cmd.index("-vf")
     vf_chain = cmd[idx_vf + 1]
     assert "scale=1920:1080" in vf_chain
-    assert "curves=all=" in vf_chain
+    assert "brightness=" in vf_chain
     assert "all_seed=777" in vf_chain
 
 

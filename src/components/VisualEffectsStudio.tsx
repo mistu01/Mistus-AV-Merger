@@ -99,25 +99,19 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
       ctx.fillStyle = '#0a0a14';
       ctx.fillRect(0, 0, w, h);
 
-      // Draw gradient sunset / sky
+      // Draw gradient sunset / sky (natural synthwave colors, independent of night mode)
       const grad = ctx.createLinearGradient(0, 0, 0, h * 0.7);
-      if (nightMode) {
-        grad.addColorStop(0, '#020617');
-        grad.addColorStop(0.5, '#0f172a');
-        grad.addColorStop(1, '#1e1b4b');
-      } else {
-        grad.addColorStop(0, '#18022b');
-        grad.addColorStop(0.5, '#4c0519');
-        grad.addColorStop(1, '#9a3412');
-      }
+      grad.addColorStop(0, '#18022b');
+      grad.addColorStop(0.5, '#4c0519');
+      grad.addColorStop(1, '#9a3412');
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, w, h * 0.7);
 
       // Draw neon retro sun
       const sunY = h * 0.45;
       const sunGrad = ctx.createRadialGradient(w / 2, sunY, 10, w / 2, sunY, 70);
-      sunGrad.addColorStop(0, nightMode ? '#38bdf8' : '#fde047');
-      sunGrad.addColorStop(1, nightMode ? '#1e3a8a' : '#e11d48');
+      sunGrad.addColorStop(0, '#fde047');
+      sunGrad.addColorStop(1, '#e11d48');
       ctx.fillStyle = sunGrad;
       ctx.beginPath();
       ctx.arc(w / 2, sunY, 60, 0, Math.PI * 2);
@@ -133,7 +127,7 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
 
       // Draw 3D wireframe perspective grid at bottom
       const gridTop = h * 0.7;
-      ctx.strokeStyle = nightMode ? '#0284c7' : '#ec4899';
+      ctx.strokeStyle = '#ec4899';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       for (let x = -w * 0.5; x <= w * 1.5; x += 35) {
@@ -232,34 +226,12 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
         }
       }
 
-      // 6. Night mode tint & vignette (smooth continuous scaling with nightIntensity)
+      // 6. Night mode darkening - purely dims footage into darkness (no blue tint, no noise)
       if (nightMode) {
-        // Shadow dimming
         ctx.save();
-        ctx.fillStyle = `rgba(0, 0, 0, ${nightIntensity * 0.45})`;
+        ctx.fillStyle = `rgba(0, 0, 0, ${Math.min(0.92, 0.15 + nightIntensity * 0.75)})`;
         ctx.fillRect(0, 0, w, h);
         ctx.restore();
-
-        // Moonlight cold wash
-        ctx.save();
-        ctx.globalCompositeOperation = 'color-burn';
-        ctx.fillStyle = `rgba(15, 23, 42, ${nightIntensity * 0.60})`;
-        ctx.fillRect(0, 0, w, h);
-        ctx.restore();
-
-        // Subtle cool blue screen
-        ctx.save();
-        ctx.globalCompositeOperation = 'screen';
-        ctx.fillStyle = `rgba(30, 58, 138, ${nightIntensity * 0.25})`;
-        ctx.fillRect(0, 0, w, h);
-        ctx.restore();
-
-        // Edge vignette
-        const vigGrad = ctx.createRadialGradient(w / 2, h / 2, w * 0.25, w / 2, h / 2, w * 0.65);
-        vigGrad.addColorStop(0, 'rgba(0,0,0,0)');
-        vigGrad.addColorStop(1, `rgba(0,0,0,${Math.min(0.85, 0.20 + nightIntensity * 0.65)})`);
-        ctx.fillStyle = vigGrad;
-        ctx.fillRect(0, 0, w, h);
       }
 
       // 7. Graphic Overlay (Watermark / OSD / Bouncing VCD Logo)
@@ -468,7 +440,7 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
             <div className="bg-[#111] text-yellow-300 border-[3px] border-black p-3 font-mono text-[11px] break-all select-all">
               {resolution !== 'original' && `scale=${resolution === '1080p' ? '1920:1080' : resolution === '720p' ? '1280:720' : '854:480'}:force_original_aspect_ratio=decrease,pad=${resolution === '1080p' ? '1920:1080' : resolution === '720p' ? '1280:720' : '854:480'}:(ow-iw)/2:(oh-ih)/2,`}
               {activePreset.filtergraph || (!hasEffects ? 'No filter — stream copy enabled (-c:v copy)' : '')}
-              {nightMode && `${activePreset.filtergraph ? ',' : ''}eq=contrast=${(1.05 + 0.25 * nightIntensity).toFixed(2)}:brightness=${(-0.04 - 0.22 * nightIntensity).toFixed(2)}:saturation=${Math.max(0.15, 1.0 - 0.75 * nightIntensity).toFixed(2)}:gamma=${Math.max(0.45, 1.0 - 0.45 * nightIntensity).toFixed(2)},vignette=PI/3.5*${(0.20 + 0.80 * nightIntensity).toFixed(2)},noise=${Math.round(8 + 14 * nightIntensity)}`}
+              {nightMode && `${activePreset.filtergraph ? ',' : ''}eq=brightness=${(-0.05 - 0.45 * nightIntensity).toFixed(2)}:gamma=${(1.0 - 0.65 * nightIntensity).toFixed(2)}`}
               {staticBursts && `${(activePreset.filtergraph || nightMode) ? ',' : ''}noise=alls=65:allf=t+u:all_seed=${noiseSeed}:enable=\'lt(mod(t,4.5),0.35)\',drawbox=y=ih-42:color=white@0.70:width=iw:height=4:t=fill:enable=\'lt(mod(t,4.5),0.35)\'`}
               {overlayEnabled && (overlayAnimation === 'bounce'
                 ? `${(activePreset.filtergraph || nightMode || staticBursts) ? ',' : ''}[1:v]scale=rw*0.40:-1[ov];[0:v][ov]overlay=x='(W-w)-abs(mod(0.15*W*t,2*(W-w))-(W-w))':y='(H-h)-abs(mod(0.11*H*t,2*(H-h))-(H-h))'${overlayTimeout !== 'full' ? `:enable='lte(t,${overlayTimeout})'` : ''}`

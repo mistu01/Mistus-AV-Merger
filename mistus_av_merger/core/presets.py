@@ -8,70 +8,71 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-DEFAULT_PRESETS: List[Dict[str, Any]] = [   {   'chroma_shift': True,
-        'description': 'Authentic 90s commercial SP tape with horizontal tape head softening, subtle CRT scanlines, '
-                       'mild chroma shift, and vintage tape warmth.',
-        'filtergraph': 'avgblur=sizeX=4:sizeY=1,chromashift=cbh=8:crh=-8,drawgrid=width=iw:height=4:thickness=1:color=black@0.28,drawbox=y=ih-20:color=black@0.70:width=iw:height=20:t=fill,noise=alls=24:allf=t+u,eq=contrast=1.12:saturation=1.28:brightness=0.01,curves=vintage',
+DEFAULT_PRESETS: List[Dict[str, Any]] = [   {   'chroma_shift': False,
+        'description': 'Authentic commercial SP tape playback: warm 90s tape color, gentle tape softness, mild luma '
+                       'grain, and subtle overscan line. Clean, nostalgic analog look without harsh glitches.',
+        'filtergraph': 'avgblur=sizeX=3:sizeY=1,noise=alls=15:allf=t,eq=contrast=1.06:saturation=1.20:brightness=0.02,curves=vintage,drawbox=y=ih-12:color=black@0.6:width=iw:height=12:t=fill',
         'id': 'clean_vhs',
-        'intensity': 0.5,
+        'intensity': 0.4,
         'name': 'Clean VHS (SP Mode)',
-        'scanlines': True,
+        'scanlines': False,
         'tracking_noise': False},
-    {   'chroma_shift': True,
-        'description': 'Heavy LP mode magnetic tape wear with horizontal color bleed, distinct CRT scanlines, bottom '
-                       'head-switching glitch bar with sync tear, and magnetic noise.',
-        'filtergraph': 'avgblur=sizeX=6:sizeY=1,chromashift=cbh=16:cbv=1:crh=-16:crv=-1,drawgrid=width=iw:height=4:thickness=1:color=black@0.36,drawbox=y=ih-34:color=black@0.85:width=iw:height=34:t=fill,drawbox=y=ih-38:color=white@0.55:width=iw:height=3:t=fill,noise=alls=38:allf=t+u,eq=contrast=1.22:saturation=1.35:brightness=-0.02',
+    {   'chroma_shift': False,
+        'description': 'Aged family tape played hundreds of times: yellowed/aged tape color oxidation, soft magnetic '
+                       'flutter, visible tape noise, and lower-third head-switching drift.',
+        'filtergraph': 'colorchannelmixer=rr=1.05:rg=0.05:rb=-0.05:br=-0.1:bg=-0.05:bb=0.9,eq=contrast=1.12:saturation=0.90:brightness=-0.02,avgblur=sizeX=5:sizeY=1,drawbox=y=ih-28:color=black@0.80:width=iw:height=28:t=fill,drawbox=y=ih-32:color=white@0.4:width=iw:height=2:t=fill,noise=alls=30:allf=t+u',
         'id': 'worn_tape',
-        'intensity': 0.7,
+        'intensity': 0.65,
         'name': 'Worn Tape (LP Mode)',
-        'scanlines': True,
+        'scanlines': False,
         'tracking_noise': True},
-    {   'chroma_shift': True,
-        'description': 'Severe VHS tracking misalignment: heavy chroma split, horizontal CRT scanlines, large '
-                       'head-switching bar, white sync tearing jitter lines, and tape static.',
-        'filtergraph': 'avgblur=sizeX=5:sizeY=1,chromashift=cbh=26:cbv=2:crh=-24:crv=-2,drawgrid=width=iw:height=4:thickness=1:color=black@0.42,drawbox=y=ih-46:color=black@0.92:width=iw:height=46:t=fill,drawbox=y=ih-52:color=white@0.75:width=iw:height=4:t=fill,drawbox=y=ih-30:color=white@0.40:width=iw:height=2:t=fill,noise=alls=54:allf=t+u,eq=contrast=1.28:saturation=1.22:brightness=-0.03',
+    {   'chroma_shift': False,
+        'description': 'Severe VCR tracking misalignment: active horizontal static tearing bands slicing through the '
+                       'frame, thick head-switching glitches, sync tearing lines, and heavy static snow.',
+        'filtergraph': 'avgblur=sizeX=4:sizeY=1,drawbox=y=ih-48:color=black@0.92:width=iw:height=48:t=fill,drawbox=y=ih-54:color=white@0.80:width=iw:height=4:t=fill,drawbox=y=ih-34:color=white@0.50:width=iw:height=3:t=fill,drawbox=y=ih*0.65:color=black@0.65:width=iw:height=18:t=fill:enable=lt(mod(t\\,3)\\,0.8),drawbox=y=ih*0.65+18:color=white@0.7:width=iw:height=3:t=fill:enable=lt(mod(t\\,3)\\,0.8),noise=alls=50:allf=t+u,eq=contrast=1.25:saturation=1.15:brightness=-0.03',
         'id': 'tracking_errors',
         'intensity': 0.85,
         'name': 'Tracking Errors',
-        'scanlines': True,
+        'scanlines': False,
         'tracking_noise': True},
     {   'chroma_shift': True,
-        'description': 'Heavy composite RCA analog cable bleeding: bold red/cyan color halos, horizontal softening, '
-                       'CRT scanlines, and saturated color halos.',
-        'filtergraph': 'avgblur=sizeX=4:sizeY=1,chromashift=cbh=26:cbv=2:crh=-26:crv=-2,drawgrid=width=iw:height=4:thickness=1:color=black@0.32,noise=alls=26:allf=t+u,eq=saturation=1.70:contrast=1.18:brightness=0.01',
+        'description': 'Extreme RCA composite analog cable color misregistration: bold red/cyan halos bleeding out of '
+                       'objects, hyper-saturated bleeding colors, and composite noise. No dark bars.',
+        'filtergraph': 'chromashift=cbh=28:cbv=2:crh=-28:crv=-2,avgblur=sizeX=3:sizeY=1,eq=saturation=1.90:contrast=1.15:brightness=0.01,noise=alls=16:allf=t+u',
         'id': 'chroma_bleed',
         'intensity': 0.75,
         'name': 'Chroma Bleed',
-        'scanlines': True,
+        'scanlines': False,
         'tracking_noise': False},
     {   'chroma_shift': True,
-        'description': 'Nostalgic 1990s handheld camcorder: warm incandescent color balance, vivid saturation, CRT '
-                       'interlace lines, lens chroma drift, and tape grain.',
-        'filtergraph': "curves=red='0/0 0.5/0.60 1/1':blue='0/0 0.5/0.38 "
-                       "1/0.88',chromashift=cbh=8:crh=-8,drawgrid=width=iw:height=4:thickness=1:color=black@0.32,eq=saturation=1.45:contrast=1.18:brightness=0.02,noise=alls=26:allf=t+u",
+        'description': 'Handheld 1990s home video camcorder: warm tungsten incandescent indoor lighting, sharp CCD '
+                       'sensor edge sharpening, CRT interlace lines, and camera master vibrancy. No tracking bars.',
+        'filtergraph': "curves=red='0/0 0.5/0.62 1/1':blue='0/0 0.5/0.38 "
+                       "1/0.88',chromashift=cbh=6:crh=-6,drawgrid=width=iw:height=4:thickness=1:color=black@0.25,unsharp=lx=5:ly=5:la=1.2:cx=3:cy=3:ca=0.8,eq=saturation=1.45:contrast=1.18:brightness=0.02,noise=alls=20:allf=t",
         'id': 'camcorder_90s',
-        'intensity': 0.65,
+        'intensity': 0.6,
         'name': 'Camcorder 90s',
         'scanlines': True,
         'tracking_noise': False},
     {   'chroma_shift': False,
-        'description': 'Authentic CCTV surveillance footage: high-contrast monochrome with subtle phosphor green tint, '
-                       'CRT scanlines, 12fps surveillance stutter, fisheye lens vignette, and chunky sensor noise.',
-        'filtergraph': "hue=s=0,eq=contrast=1.85:brightness=-0.07,curves=all='0/0 0.5/0.44 1/0.95':green='0/0 0.5/0.58 "
-                       "1/1',drawgrid=width=iw:height=4:thickness=1:color=black@0.48,vignette=PI/2.8,noise=alls=48:allf=t+u,fps=12",
+        'description': 'Authentic CCTV surveillance footage: jerky 12 FPS surveillance cadence, high-contrast '
+                       'monochrome with eerie green phosphor monitor glow, convex security lens vignette, and CCD '
+                       'sensor noise.',
+        'filtergraph': "hue=s=0,eq=contrast=1.85:brightness=-0.08,curves=all='0/0 0.5/0.44 1/0.95':green='0/0 0.5/0.60 "
+                       "1/1',drawgrid=width=iw:height=4:thickness=1:color=black@0.45,vignette=PI/2.6,noise=alls=42:allf=t+u,fps=12",
         'id': 'security_cam',
         'intensity': 0.95,
         'name': 'Security Cam (CCTV)',
         'scanlines': True,
-        'tracking_noise': True},
+        'tracking_noise': False},
     {   'chroma_shift': True,
-        'description': 'Total tape decay & analog generation loss: extreme horizontal blur, intense chroma '
-                       'displacement, dense scanlines, bottom tracking tear, and heavy static snow.',
-        'filtergraph': 'avgblur=sizeX=9:sizeY=2,chromashift=cbh=30:cbv=3:crh=-28:crv=-3,drawgrid=width=iw:height=3:thickness=1:color=black@0.48,drawbox=y=ih-52:color=black@0.92:width=iw:height=52:t=fill,drawbox=y=ih-58:color=white@0.65:width=iw:height=5:t=fill,noise=alls=68:allf=t+u,eq=contrast=1.38:saturation=0.70:brightness=-0.04',
+        'description': 'Total tape decay & analog generation loss (found footage horror): extreme horizontal blur '
+                       'smear, massive static snowstorm, severe tape tears, and degraded muddy luma.',
+        'filtergraph': 'avgblur=sizeX=10:sizeY=2,chromashift=cbh=24:cbv=3:crh=-24:crv=-3,drawbox=y=ih-52:color=black@0.92:width=iw:height=52:t=fill,drawbox=y=ih-58:color=white@0.70:width=iw:height=5:t=fill,noise=alls=65:allf=t+u,eq=contrast=1.35:saturation=0.65:brightness=-0.04',
         'id': 'heavy_degradation',
         'intensity': 1.0,
         'name': 'Heavy Degradation',
-        'scanlines': True,
+        'scanlines': False,
         'tracking_noise': True}]
 
 
