@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ## [Unreleased]
 
+### Planned
+- (nothing yet)
+
+---
+
+## [0.6.28] - 2026-10-30
+
 ### Fixed
 - **Guaranteed Fast Loop Pre-Render + Stream Copy Pipeline**:
   - Fixed an issue where video files with unprobed duration or duration longer than audio bypassed the fast 2-step loop pipeline and triggered a full-length frame-by-frame re-encode of the entire audio file (taking minutes instead of seconds).
