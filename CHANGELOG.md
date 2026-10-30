@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ## [Unreleased]
 
+### Planned
+- (nothing yet)
+
+---
+
+## [0.6.29] - 2026-10-30
+
 ### Fixed
 - **Constrained Scene VBV Rate Control (~350 MB/hr Output Budget Without Pixelation)**:
   - Eliminated file size ballooning (where renders with noise static or VHS effects previously generated 50+ Mbps and 10+ GB incomplete files).
