@@ -217,11 +217,11 @@ export const QueueView: React.FC<QueueViewProps> = ({
                   </div>
 
                   <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
-                    {job.mode === 'copy' ? (
-                      <span className="nb-badge nb-badge-lime"><Zap className="w-3 h-3" /> Copy</span>
+                    {job.mode === 'copy' || job.encoder === 'stream-copy' || job.encoder === 'copy' ? (
+                      <span className="nb-badge nb-badge-lime font-mono"><Zap className="w-3 h-3" /> Fast Copy</span>
                     ) : (
                       <span
-                        className="nb-badge nb-badge-yellow"
+                        className="nb-badge nb-badge-yellow font-mono"
                         title={job.encoder ? `Rendered with: ${job.encoder}` : undefined}
                       >
                         <Layers className="w-3 h-3" />

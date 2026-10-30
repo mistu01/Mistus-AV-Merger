@@ -9,8 +9,13 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ## [Unreleased]
 
-### Planned
-- (nothing yet)
+### Fixed
+- **Guaranteed Fast Loop Pre-Render + Stream Copy Pipeline**:
+  - Fixed an issue where video files with unprobed duration or duration longer than audio bypassed the fast 2-step loop pipeline and triggered a full-length frame-by-frame re-encode of the entire audio file (taking minutes instead of seconds).
+  - The fast 2-step pipeline is now the guaranteed execution path for all visual effect renders: Step 1 pre-renders only a tight 5s to 15s loop clip in pristine visually-lossless CRF quality (taking ~1–2 seconds), and Step 2 instantly stream-copies (-c:v copy) that rendered loop across the entire audio track at 2000x+ speed (taking ~2–3 seconds for an entire 1-hour audio file).
+  - Capped loop pre-render duration to 10s (or 20s for animated/bounce overlays) so long input videos are never unnecessarily re-encoded across their entire file length.
+  - Fixed queue payload serialization to pass ideo_duration and ideo_duration_sec from the frontend, backed by robust fallback probing and safe duration defaults.
+  - Updated Queue UI badges and process logs: when Step 2 stream-copy begins, the badge flips dynamically to ⚡ Fast Copy with dedicated stream-copy metrics.
 
 ---
 

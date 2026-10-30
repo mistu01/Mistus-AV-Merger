@@ -397,9 +397,11 @@ export default function App() {
       mode: effectiveMode,
       mode_reason: effectiveReason,
       duration: audio.duration,
+      video_duration: video.duration,
       ...(bulkFolder ? { overlay_folder: bulkFolder } : {}),
       options: {
         ...renderOptions,
+        video_duration_sec: video.duration,
         ...(selectedEncoder !== 'auto' ? { encoder: selectedEncoder } : {}),
         ...(bulkFolder ? { overlayFolder: bulkFolder } : {}),
       },

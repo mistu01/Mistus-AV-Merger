@@ -116,7 +116,10 @@ export const SingleRenderView: React.FC<SingleRenderViewProps> = ({
       audio: selectedAudio,
       video: selectedVideo,
       outputName: predictedOutputName,
-      options: renderOptions,
+      options: {
+        ...renderOptions,
+        video_duration_sec: selectedVideo.duration,
+      },
       mode: hasEffects ? 'encode' : copyDecision.mode,
       modeReason: hasEffects ? 'Visual effects active (re-encode required)' : copyDecision.reason,
     });

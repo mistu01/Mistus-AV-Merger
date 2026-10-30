@@ -51,6 +51,7 @@ export interface RenderOptions {
   crf?: number;
   sizeTarget?: 'small' | 'balanced' | 'high' | 'unlimited';
   cpuProfile?: 'aggressive' | 'balanced' | 'low' | 'idle';
+  video_duration_sec?: number;
 }
 
 export interface PairingResult {
