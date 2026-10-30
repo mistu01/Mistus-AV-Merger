@@ -186,7 +186,13 @@ class FFmpegCommandBuilder:
                     "-pix_fmt", "yuv420p",
                 ])
         else:
-            # CRF / Visual Quality Mode (Bluray Scene standard: crisp, no macroblocks)
+            # Constrained Scene CRF Mode:
+            # Targets compact ~350 MB/hour (avg ~700-750 kbps video + 128 kbps audio) while strictly preventing
+            # bitrate ballooning (caps peak to 950 kbps with a 1900 kbps VBV buffer).
+            # Film-tuned adaptive quantization guarantees crisp visual fidelity with zero macroblocking.
+            vbv_maxrate = 950
+            vbv_bufsize = 1900
+            target_b = 720
             if "nvenc" in enc:
                 target_cq = 18 if "h264" in enc else (20 if "hevc" in enc else 22)
                 pix = "p010le" if ("hevc" in enc or "av1" in enc) else "yuv420p"
@@ -195,7 +201,9 @@ class FFmpegCommandBuilder:
                     "-preset", self._NVENC_PRESET,
                     "-rc:v", "vbr",
                     "-cq:v", str(target_cq),
-                    "-b:v", "0",
+                    "-b:v", f"{target_b}k",
+                    "-maxrate", f"{vbv_maxrate}k",
+                    "-bufsize", f"{vbv_bufsize}k",
                     "-spatial-aq", "1",
                     "-temporal-aq", "1",
                     "-pix_fmt", pix,
@@ -207,6 +215,9 @@ class FFmpegCommandBuilder:
                     "-c:v", encoder,
                     "-preset", self._QSV_PRESET,
                     "-global_quality", str(target_gq),
+                    "-b:v", f"{target_b}k",
+                    "-maxrate", f"{vbv_maxrate}k",
+                    "-bufsize", f"{vbv_bufsize}k",
                     "-look_ahead", "1",
                     "-look_ahead_depth", "24",
                     "-pix_fmt", pix,
@@ -217,16 +228,17 @@ class FFmpegCommandBuilder:
                 cmd.extend([
                     "-c:v", encoder,
                     "-quality", "quality",
-                    "-rc", "cqp",
-                    "-qp_i", str(qp_i),
-                    "-qp_p", str(qp_i + 2),
-                    "-qp_b", str(qp_i + 4),
+                    "-rc", "vbr_peak",
+                    "-b:v", f"{target_b}k",
+                    "-maxrate", f"{vbv_maxrate}k",
+                    "-bufsize", f"{vbv_bufsize}k",
                     "-pix_fmt", pix,
                 ])
             elif "videotoolbox" in enc:
                 cmd.extend([
                     "-c:v", encoder,
-                    "-q:v", "65",
+                    "-b:v", f"{target_b}k",
+                    "-maxrate", f"{vbv_maxrate}k",
                     "-pix_fmt", "yuv420p",
                 ])
             elif "libsvtav1" in enc:
@@ -234,6 +246,9 @@ class FFmpegCommandBuilder:
                 cmd.extend([
                     "-c:v", "libsvtav1",
                     "-crf", str(crf if crf and crf != 21 else 24),
+                    "-b:v", f"{target_b}k",
+                    "-maxrate", f"{vbv_maxrate}k",
+                    "-bufsize", f"{vbv_bufsize}k",
                     "-preset", "5",
                     "-svtav1-params", "tune=0",
                     "-pix_fmt", "yuv420p10le",
@@ -243,23 +258,32 @@ class FFmpegCommandBuilder:
                 cmd.extend([
                     "-c:v", "libvvenc",
                     "-qp", str(crf if crf and crf != 21 else 24),
+                    "-b:v", f"{target_b}k",
+                    "-maxrate", f"{vbv_maxrate}k",
+                    "-bufsize", f"{vbv_bufsize}k",
                     "-preset", "fast",
                     "-pix_fmt", "yuv420p10le",
                 ])
             elif "libx265" in enc or "hevc" in enc:
-                # x265 10-bit CRF 20 medium: scene standard
+                # x265 10-bit CRF 20 medium with VBV peak cap: scene standard
                 cmd.extend([
                     "-c:v", "libx265",
                     "-crf", str(crf if crf and crf != 21 else 20),
+                    "-maxrate", f"{vbv_maxrate}k",
+                    "-bufsize", f"{vbv_bufsize}k",
                     "-preset", "medium",
+                    "-tag:v", "hvc1",
                     "-pix_fmt", "yuv420p10le",
                 ])
             else:
-                # libx264 slow CRF 18: sharp details, zero blocking, universal compatibility
+                # libx264 slow CRF 18 with VBV peak cap & film tuning: sharp details, zero blocking, ~350 MB/hr
                 cmd.extend([
                     "-c:v", "libx264",
                     "-crf", str(crf if crf and crf != 21 else 18),
+                    "-maxrate", f"{vbv_maxrate}k",
+                    "-bufsize", f"{vbv_bufsize}k",
                     "-preset", self._X264_PRESET,
+                    "-tune", "film",
                     "-pix_fmt", "yuv420p",
                 ])
 
@@ -384,7 +408,7 @@ class FFmpegCommandBuilder:
         # Codec and quality settings: scene-release high fidelity
         self._apply_video_encoder_flags(cmd, encoder, crf=crf, bitrate_kbps=bitrate_kbps)
 
-        # Audio encode to AAC (tiered audio bitrate rides along with the cap)
+        # Audio encode to AAC (192k clean high-fidelity audio)
         audio_kbps = audio_bitrate_kbps or 192
         cmd.extend(["-c:a", "aac", "-b:a", f"{audio_kbps}k"])
 

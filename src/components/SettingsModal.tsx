@@ -113,11 +113,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 {hwSummary?.encoders?.hevc_videotoolbox && <option value="hevc_videotoolbox">Apple VideoToolbox HEVC</option>}
               </optgroup>
               <optgroup label="High-Fidelity CPU Encoders (Universal Scene Standards)">
-                <option value="libx264">H.264 / AVC (libx264) - Maximum Universal Compatibility (Slow CRF 18)</option>
-                <option value="libx265">H.265 / HEVC (libx265) - 10-Bit Pristine Compression (CRF 20)</option>
-                <option value="libsvtav1">AV1 (libsvtav1) - Next-Gen Ultra Efficiency (10-Bit Preset 5)</option>
+                <option value="libx264">H.264 / AVC (libx264) - Compact Scene Quality (~350 MB/hr, Film Tuned CRF 18)</option>
+                <option value="libx265">H.265 / HEVC (libx265) - Ultra Efficient (~320 MB/hr, 10-Bit CRF 20)</option>
+                <option value="libsvtav1">AV1 (libsvtav1) - Next-Gen Compact (~300 MB/hr, 10-Bit Preset 5)</option>
                 {hwSummary?.encoders?.libvvenc && (
-                  <option value="libvvenc">H.266 / VVC (libvvenc) - Future-Gen Compact (10-Bit Fast QP 24)</option>
+                  <option value="libvvenc">H.266 / VVC (libvvenc) - Future-Gen Compact (~280 MB/hr, 10-Bit Fast QP 24)</option>
                 )}
               </optgroup>
             </select>

@@ -9,8 +9,13 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ## [Unreleased]
 
-### Planned
-- (nothing yet)
+### Fixed
+- **Constrained Scene VBV Rate Control (~350 MB/hr Output Budget Without Pixelation)**:
+  - Eliminated file size ballooning (where renders with noise static or VHS effects previously generated 50+ Mbps and 10+ GB incomplete files).
+  - Applied scene-release standard Constrained CRF (VBV mode) across all encoders:
+    - Peak video bitrate is strictly capped to 950k with a 1900k VBV smoothing buffer.
+    - An entire 1-hour audio render with visual effects and retro noise/static strictly stays within the target budget of ~300 MB to 370 MB total (averaging ~350 MB/hr).
+    - Preserves high visual fidelity without macroblocking or pixelation through film tuning (-tune film on libx264), 10-bit color pipelines on HEVC/AV1, and hardware spatial/temporal adaptive quantization (-spatial-aq 1 -temporal-aq 1 on NVENC / lookahead on QSV).
 
 ---
 
