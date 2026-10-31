@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ## [Unreleased]
 
+### Planned
+- (nothing yet)
+
+---
+
+## [0.6.30] - 2026-10-31
+
 ### Added
 - **Dynamic Randomized Loop Durations & Offsets for YouTube Deduplication Safety**:
   - Implemented intelligent loop randomization across both visual effect pre-renders and pure stream-copy renders.
