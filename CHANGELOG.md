@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ## [Unreleased]
 
+### Planned
+- (nothing yet)
+
+---
+
+## [0.6.32] - 2026-10-31
+
 ### Added
 - **Continuous Randomized Multi-Loop Variations Throughout Audio Duration**:
   - Solved continuous loop variation during long audio pairings: when a video clip (e.g. 30s) is paired with a long audio track (e.g. 1 hour, ~120 loops), each individual repeating loop iteration across the entire audio duration is dynamically randomized in length (e.g. Loop 1 = 23.5s, Loop 2 = 27.2s, Loop 3 = 25.8s, etc.).
