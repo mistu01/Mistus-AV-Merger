@@ -9,8 +9,14 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ## [Unreleased]
 
-### Planned
-- (nothing yet)
+### Added
+- **Dynamic Randomized Loop Durations & Offsets for YouTube Deduplication Safety**:
+  - Implemented intelligent loop randomization across both visual effect pre-renders and pure stream-copy renders.
+  - Automatically probes source video duration:
+    - If video length is >= 30.0s: Slices a randomized loop duration between 25.0s and 30.0s (e.g. 26.8s, 28.4s), combined with a randomized starting time offset within the source clip.
+    - If video length is between 15.0s and 30.0s: Dynamically randomizes the cut in the range [0.8 * video_dur, video_dur].
+  - Every track in the render queue receives a unique loop cycle, unique keyframe interval, and distinct video stream signature, preventing identical video hash deduplication on YouTube.
+  - Operates seamlessly with Phase 2 Fast Stream Copy: Step 1 pre-renders the random slice in ~2 seconds, and Step 2 stream-copies it across the audio track at 2000x–3000x speed (~2.5s for 1 hour).
 
 ---
 

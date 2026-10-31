@@ -718,7 +718,8 @@ def _execute_job(job: RenderJob):
                 concat_list = temp_dir / f"concat_{job.job_id}.txt"
 
                 rem_dur = audio_dur - t_overlay
-                clean_loop_dur = min(rem_dur, min(video_dur, 15.0) if (video_dur > 0 and video_dur <= 20.0) else 10.0)
+                from mistus_av_merger.core.ffmpeg_builder import compute_randomized_loop_params
+                clean_start_time, clean_loop_dur = compute_randomized_loop_params(video_dur, rem_dur)
 
                 job.logs.append(
                     f"[info] Step 1: Pre-rendering {t_overlay:.1f}s overlay segment ({encoder})..."
@@ -790,6 +791,7 @@ def _execute_job(job: RenderJob):
                         overlay_path=None,  # No overlay in Segment B!
                         loop_input=(video_dur < clean_loop_dur),
                         duration_sec=clean_loop_dur,
+                        start_time_sec=clean_start_time,
                         threads=job_threads,
                     )
                     _run_render_process(job, cmd_b_clean)
@@ -842,12 +844,13 @@ def _execute_job(job: RenderJob):
 
             # Sub-case B: Fulltime overlay or general loop (the standard case)
             else:
+                from mistus_av_merger.core.ffmpeg_builder import compute_randomized_loop_params
+
                 if overlay_animation in ("bounce", "vcd", "animated"):
                     loop_dur = min(audio_dur, 20.0)
-                elif 0 < video_dur <= 20.0:
-                    loop_dur = min(audio_dur, video_dur)
+                    start_time = 0.0
                 else:
-                    loop_dur = min(audio_dur, 10.0)
+                    start_time, loop_dur = compute_randomized_loop_params(video_dur, audio_dur)
 
                 temp_loop = temp_dir / f"filtered_loop_{job.job_id}.mp4"
 
@@ -867,10 +870,17 @@ def _execute_job(job: RenderJob):
                         overlay_animation=overlay_animation,
                         loop_input=(video_dur < loop_dur),
                         duration_sec=loop_dur,
+                        start_time_sec=start_time,
                         threads=job_threads,
                     )
 
-                job.logs.append(f"[info] Step 1: Pre-rendering {loop_dur:.1f}s loop clip ({encoder})...")
+                if start_time > 0:
+                    job.logs.append(
+                        f"[info] Step 1: Pre-rendering randomized {loop_dur:.1f}s loop clip "
+                        f"(start: {start_time:.1f}s / src: {video_dur:.1f}s) ({encoder})..."
+                    )
+                else:
+                    job.logs.append(f"[info] Step 1: Pre-rendering {loop_dur:.1f}s loop clip ({encoder})...")
                 command = _build_loop_cmd(encoder)
                 job.encoder = encoder
                 _run_render_process(job, command)
@@ -951,17 +961,68 @@ def _execute_job(job: RenderJob):
         else:
             if not queue_mgr.is_running:
                 return
+            from mistus_av_merger.core.ffmpeg_builder import compute_randomized_loop_params
+
             video_dur = float(opts.get("video_duration_sec") or 0.0)
-            command = ffmpeg_builder.build_stream_copy_loop(
-                video_path=video,
-                audio_path=audio,
-                output_path=output,
-                audio_transcode=_needs_audio_transcode(audio, output),
-                audio_duration_sec=job.duration or None,
-                video_duration_sec=video_dur or None,
-                threads=job_threads,
-            )
-            _run_render_process(job, command)
+            if not video_dur and video.exists():
+                video_dur = _pick_probe_duration(video) or 0.0
+            audio_dur = float(job.duration or 0.0)
+            if not audio_dur and audio.exists():
+                audio_dur = _pick_probe_duration(audio) or 0.0
+
+            # If video is 25s or longer and audio is longer than video, slice a randomized loop cut via stream copy
+            if video_dur >= 25.0 and audio_dur > video_dur:
+                from mistus_av_merger.config import get_temp_dir
+                temp_dir = get_temp_dir()
+                temp_dir.mkdir(parents=True, exist_ok=True)
+                temp_slice = temp_dir / f"copy_slice_{job.job_id}.mp4"
+
+                start_time, loop_dur = compute_randomized_loop_params(video_dur, audio_dur)
+                job.logs.append(
+                    f"[info] Slicing randomized {loop_dur:.1f}s clip (start: {start_time:.1f}s / src: {video_dur:.1f}s) via stream copy..."
+                )
+                slice_cmd = [
+                    ffmpeg_builder.ffmpeg_bin, "-y", "-hide_banner", "-loglevel", "error", "-nostdin",
+                    "-ss", f"{start_time:.3f}",
+                    "-i", str(video),
+                    "-t", f"{loop_dur:.3f}",
+                    "-c", "copy",
+                    "-movflags", "+faststart",
+                    str(temp_slice),
+                ]
+                _run_render_process(job, slice_cmd)
+                if not queue_mgr.is_running or job.status != "completed" or not temp_slice.exists():
+                    try:
+                        temp_slice.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+                    return
+
+                command = ffmpeg_builder.build_stream_copy_loop(
+                    video_path=temp_slice,
+                    audio_path=audio,
+                    output_path=output,
+                    audio_transcode=_needs_audio_transcode(audio, output),
+                    audio_duration_sec=audio_dur,
+                    video_duration_sec=loop_dur,
+                    threads=job_threads,
+                )
+                _run_render_process(job, command)
+                try:
+                    temp_slice.unlink(missing_ok=True)
+                except Exception:
+                    pass
+            else:
+                command = ffmpeg_builder.build_stream_copy_loop(
+                    video_path=video,
+                    audio_path=audio,
+                    output_path=output,
+                    audio_transcode=_needs_audio_transcode(audio, output),
+                    audio_duration_sec=job.duration or None,
+                    video_duration_sec=video_dur or None,
+                    threads=job_threads,
+                )
+                _run_render_process(job, command)
     except Exception as exc:  # defensive: a bad job must not kill the worker
         job.status = "failed"
         job.logs.append(f"[error] {exc}")

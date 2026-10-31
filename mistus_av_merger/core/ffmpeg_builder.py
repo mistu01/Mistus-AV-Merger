@@ -5,7 +5,48 @@ Produces safe, list-based argument arrays without shell injection risks.
 
 from math import ceil
 from pathlib import Path
+import random
 from typing import Dict, List, Optional, Tuple, Union
+
+
+def compute_randomized_loop_params(video_dur: float, audio_dur: float) -> Tuple[float, float]:
+    """
+    Computes a randomized loop duration and start time offset for YouTube content deduplication safety.
+
+    If video duration is >= 30.0s, picks a random duration between 25.0s and min(30.0, video_dur),
+    along with a randomized start offset within the source clip.
+    If video duration is between 15.0s and 30.0s, picks a random slice of [0.8*dur, dur].
+    Ensures the loop duration never exceeds audio duration.
+
+    Returns (start_time_sec, loop_duration_sec).
+    """
+    if audio_dur <= 0:
+        audio_dur = 60.0
+
+    if video_dur >= 30.0:
+        min_l = 25.0
+        max_l = min(30.0, video_dur)
+        loop_dur = round(random.uniform(min_l, max_l), 2)
+        max_start = max(0.0, video_dur - loop_dur)
+        start_time = round(random.uniform(0.0, max_start), 2) if max_start > 0 else 0.0
+    elif video_dur >= 15.0:
+        min_l = max(10.0, video_dur * 0.8)
+        max_l = video_dur
+        loop_dur = round(random.uniform(min_l, max_l), 2)
+        max_start = max(0.0, video_dur - loop_dur)
+        start_time = round(random.uniform(0.0, max_start), 2) if max_start > 0 else 0.0
+    elif video_dur >= 5.0:
+        min_l = max(5.0, video_dur * 0.8)
+        max_l = video_dur
+        loop_dur = round(random.uniform(min_l, max_l), 2)
+        max_start = max(0.0, video_dur - loop_dur)
+        start_time = round(random.uniform(0.0, max_start), 2) if max_start > 0 else 0.0
+    else:
+        loop_dur = min(audio_dur, 10.0)
+        start_time = 0.0
+
+    loop_dur = min(audio_dur, loop_dur)
+    return start_time, loop_dur
 
 
 class FFmpegCommandBuilder:
@@ -441,6 +482,7 @@ class FFmpegCommandBuilder:
         bitrate_kbps: Optional[int] = None,
         threads: Optional[int] = None,
         duration_sec: Optional[float] = None,
+        start_time_sec: Optional[float] = None,
     ) -> List[str]:
         """
         Builds command to render a single cycle of the filtered video loop without audio.
@@ -453,6 +495,8 @@ class FFmpegCommandBuilder:
             "-loglevel", "error",
             "-nostdin",
         ]
+        if start_time_sec is not None and start_time_sec > 0:
+            cmd.extend(["-ss", f"{start_time_sec:.3f}"])
         if loop_input:
             cmd.extend(["-stream_loop", "-1"])
         cmd.extend(["-i", str(video_path)])

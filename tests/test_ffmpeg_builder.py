@@ -240,11 +240,41 @@ def test_build_filtered_loop_clip():
         encoder="libx264",
         duration_sec=5.0,
         filtergraph="avgblur=sizeX=2:sizeY=2",
+        start_time_sec=3.25,
     )
     assert "-an" in cmd
     assert cmd[cmd.index("-t") + 1] == "5.000"
     assert cmd[cmd.index("-c:v") + 1] == "libx264"
     assert "avgblur=sizeX=2:sizeY=2" in cmd[cmd.index("-vf") + 1]
+    assert "-ss" in cmd
+    idx_ss = cmd.index("-ss")
+    assert cmd[idx_ss + 1] == "3.250"
+    assert idx_ss < cmd.index("-i")
+
+
+def test_compute_randomized_loop_params_30s():
+    from mistus_av_merger.core.ffmpeg_builder import compute_randomized_loop_params
+    for _ in range(20):
+        start_t, loop_d = compute_randomized_loop_params(video_dur=30.0, audio_dur=300.0)
+        assert 25.0 <= loop_d <= 30.0
+        assert 0.0 <= start_t <= (30.0 - loop_d + 1e-5)
+        assert start_t + loop_d <= 30.001
+
+
+def test_compute_randomized_loop_params_long_video():
+    from mistus_av_merger.core.ffmpeg_builder import compute_randomized_loop_params
+    for _ in range(20):
+        start_t, loop_d = compute_randomized_loop_params(video_dur=120.0, audio_dur=3600.0)
+        assert 25.0 <= loop_d <= 30.0
+        assert 0.0 <= start_t <= (120.0 - loop_d + 1e-5)
+        assert start_t + loop_d <= 120.001
+
+
+def test_compute_randomized_loop_params_short_audio():
+    from mistus_av_merger.core.ffmpeg_builder import compute_randomized_loop_params
+    start_t, loop_d = compute_randomized_loop_params(video_dur=30.0, audio_dur=15.0)
+    assert loop_d <= 15.0
+    assert start_t + loop_d <= 30.001
 
 
 def test_build_reencode_render_overlay_timeout(tmp_path):
