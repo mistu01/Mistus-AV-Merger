@@ -9,8 +9,11 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ## [Unreleased]
 
-### Planned
-- (nothing yet)
+### Improved
+- **Clean Stream Isolation & Timecode Stream Sanitization**:
+  - Added explicit video-only mapping (`-map 0:v:0 -an -dn`) when creating loop variation slices, ensuring only the clean video stream is processed.
+  - Added `-dn` (drop data streams) and `-avoid_negative_ts make_non_negative` to `build_randomized_concat_mux`.
+  - Completely silences harmless FFmpeg muxer warnings (`Application provided duration: ... in stream 2 is invalid`) caused by auxiliary timecode (`tmcd`) or metadata tracks present in certain source videos.
 
 ---
 

@@ -442,6 +442,9 @@ def test_build_randomized_concat_mux():
     assert "-t" in cmd and cmd[cmd.index("-t") + 1] == "3600.000"
     assert "-threads" in cmd and cmd[cmd.index("-threads") + 1] == "4"
     assert "-movflags" in cmd and cmd[cmd.index("-movflags") + 1] == "+faststart"
+    assert "-dn" in cmd
+    assert "-avoid_negative_ts" in cmd and cmd[cmd.index("-avoid_negative_ts") + 1] == "make_non_negative"
+    assert "-fflags" in cmd and cmd[cmd.index("-fflags") + 1] == "+genpts"
 
     # Audio transcode = True
     cmd_trans = builder.build_randomized_concat_mux(

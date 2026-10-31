@@ -125,7 +125,10 @@ def slice_loop_variations(
             "-y", "-hide_banner", "-loglevel", "error", "-nostdin",
             "-i", str(source_video),
             "-t", f"{d:.3f}",
-            "-c", "copy",
+            "-map", "0:v:0",
+            "-c:v", "copy",
+            "-an",
+            "-dn",
             "-movflags", "+faststart",
             str(slice_path),
         ]
@@ -233,6 +236,7 @@ class FFmpegCommandBuilder:
             "-hide_banner",
             "-loglevel", "error",
             "-nostdin",
+            "-fflags", "+genpts",
             "-f", "concat",
             "-safe", "0",
             "-i", str(playlist_path),
@@ -240,6 +244,8 @@ class FFmpegCommandBuilder:
             "-map", "0:v:0",
             "-map", "1:a:0",
             "-c:v", "copy",
+            "-dn",
+            "-avoid_negative_ts", "make_non_negative",
         ]
         if audio_transcode:
             cmd.extend(["-c:a", "aac", "-b:a", "192k"])
