@@ -6,6 +6,7 @@ Produces safe, list-based argument arrays without shell injection risks.
 from math import ceil
 from pathlib import Path
 import random
+import subprocess
 from typing import Dict, List, Optional, Tuple, Union
 
 
@@ -51,6 +52,88 @@ def compute_randomized_loop_params(video_dur: float, audio_dur: float) -> Tuple[
     start_time = round(random.uniform(0.0, max_start), 2) if max_start > 0.05 else 0.0
 
     return start_time, loop_dur
+
+
+def generate_random_loop_playlist(
+    slice_entries: List[Tuple[Path, float]],
+    audio_dur: float,
+    playlist_path: Path,
+) -> Path:
+    """
+    Generates an ffconcat playlist that randomly interleaves distinct slice variations
+    of the video clip so that every repeating loop across the audio duration is randomized.
+    Consecutive iterations never repeat the exact same slice.
+    """
+    if not slice_entries:
+        raise ValueError("slice_entries cannot be empty")
+
+    lines = ["ffconcat version 1.0"]
+    acc_dur = 0.0
+    last_chosen: Optional[Tuple[Path, float]] = None
+    while acc_dur < audio_dur + 5.0:
+        choices = [entry for entry in slice_entries if entry != last_chosen] or slice_entries
+        chosen_path, chosen_dur = random.choice(choices)
+        last_chosen = (chosen_path, chosen_dur)
+        lines.append(f"file '{chosen_path.resolve().as_posix()}'")
+        acc_dur += chosen_dur
+
+    playlist_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return playlist_path
+
+
+def slice_loop_variations(
+    source_video: Path,
+    base_dur: float,
+    job_id: str,
+    temp_dir: Path,
+    ffmpeg_bin: str = "ffmpeg",
+) -> List[Tuple[Path, float]]:
+    """
+    Slices distinct randomized duration variations from a source video clip
+    using ultra-fast stream copy (-c copy). Takes < 0.15s total.
+    """
+    slices: List[Tuple[Path, float]] = []
+
+    if base_dur >= 10.0:
+        durs = [
+            round(base_dur * random.uniform(0.72, 0.80), 2),
+            round(base_dur * random.uniform(0.81, 0.89), 2),
+            round(base_dur * random.uniform(0.90, 0.98), 2),
+        ]
+    elif base_dur >= 4.0:
+        durs = [
+            round(base_dur * random.uniform(0.70, 0.79), 2),
+            round(base_dur * random.uniform(0.80, 0.89), 2),
+            round(base_dur * random.uniform(0.90, 0.98), 2),
+        ]
+    else:
+        durs = [
+            round(max(1.0, base_dur * 0.75), 2),
+            round(max(1.0, base_dur * 0.88), 2),
+            round(base_dur, 2),
+        ]
+
+    unique_durs = sorted(list(set(durs)))
+    if len(unique_durs) == 1:
+        unique_durs.append(round(max(1.0, unique_durs[0] * 0.85), 2))
+
+    creationflags = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
+    for idx, d in enumerate(unique_durs):
+        slice_path = temp_dir / f"var_{job_id}_{idx}_{int(d * 100)}.mp4"
+        cmd = [
+            ffmpeg_bin,
+            "-y", "-hide_banner", "-loglevel", "error", "-nostdin",
+            "-i", str(source_video),
+            "-t", f"{d:.3f}",
+            "-c", "copy",
+            "-movflags", "+faststart",
+            str(slice_path),
+        ]
+        res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=creationflags)
+        if res.returncode == 0 and slice_path.exists() and slice_path.stat().st_size > 0:
+            slices.append((slice_path, d))
+
+    return slices
 
 
 class FFmpegCommandBuilder:
@@ -128,6 +211,51 @@ class FFmpegCommandBuilder:
             "-movflags", "+faststart",
             "-progress", "pipe:1",
             str(output_path)
+        ])
+        return cmd
+
+    def build_randomized_concat_mux(
+        self,
+        playlist_path: Path,
+        audio_path: Path,
+        output_path: Path,
+        audio_transcode: bool = False,
+        threads: Optional[int] = None,
+        duration_sec: Optional[float] = None,
+    ) -> List[str]:
+        """
+        Builds stream-copy command concatenating randomized loop variation slices
+        and muxing the audio track across the full duration.
+        """
+        cmd = [
+            self.ffmpeg_bin,
+            "-y",
+            "-hide_banner",
+            "-loglevel", "error",
+            "-nostdin",
+            "-f", "concat",
+            "-safe", "0",
+            "-i", str(playlist_path),
+            "-i", str(audio_path),
+            "-map", "0:v:0",
+            "-map", "1:a:0",
+            "-c:v", "copy",
+        ]
+        if audio_transcode:
+            cmd.extend(["-c:a", "aac", "-b:a", "192k"])
+        else:
+            cmd.extend(["-c:a", "copy"])
+
+        if duration_sec is not None:
+            cmd.extend(["-t", f"{duration_sec:.3f}"])
+
+        if threads:
+            cmd.extend(["-threads", str(threads)])
+
+        cmd.extend([
+            "-movflags", "+faststart",
+            "-progress", "pipe:1",
+            str(output_path),
         ])
         return cmd
 

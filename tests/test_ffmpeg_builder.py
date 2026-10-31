@@ -383,3 +383,76 @@ def test_build_reencode_render_scene_encoders():
     assert "-look_ahead" in cmd_qsv and cmd_qsv[cmd_qsv.index("-look_ahead") + 1] == "1"
     assert "-global_quality" in cmd_qsv and cmd_qsv[cmd_qsv.index("-global_quality") + 1] == "18"
 
+
+def test_generate_random_loop_playlist(tmp_path):
+    from mistus_av_merger.core.ffmpeg_builder import generate_random_loop_playlist
+    slices = [
+        (tmp_path / "var_0.mp4", 23.5),
+        (tmp_path / "var_1.mp4", 26.8),
+        (tmp_path / "var_2.mp4", 29.2),
+    ]
+    pl = tmp_path / "playlist.txt"
+    generate_random_loop_playlist(slices, audio_dur=120.0, playlist_path=pl)
+
+    assert pl.exists()
+    content = pl.read_text(encoding="utf-8")
+    lines = [line.strip() for line in content.splitlines() if line.strip()]
+    assert lines[0] == "ffconcat version 1.0"
+    file_lines = lines[1:]
+    assert len(file_lines) >= 4  # At least 120s / 29.2s ~ 4 loops
+
+    # Verify all 3 slices are represented
+    assert any("var_0.mp4" in line for line in file_lines)
+    assert any("var_1.mp4" in line for line in file_lines)
+    assert any("var_2.mp4" in line for line in file_lines)
+
+    # Verify consecutive lines don't repeat the exact same slice
+    for i in range(len(file_lines) - 1):
+        assert file_lines[i] != file_lines[i + 1]
+
+
+def test_generate_random_loop_playlist_empty():
+    from mistus_av_merger.core.ffmpeg_builder import generate_random_loop_playlist
+    import pytest
+    with pytest.raises(ValueError):
+        generate_random_loop_playlist([], 60.0, Path("/tmp/empty.txt"))
+
+
+def test_build_randomized_concat_mux():
+    builder = FFmpegCommandBuilder(ffmpeg_bin="ffmpeg")
+    pl = Path("/tmp/playlist.txt")
+    audio = Path("/media/audio.mp3")
+    out = Path("/renders/output.mp4")
+
+    # Audio transcode = False (stream copy audio)
+    cmd = builder.build_randomized_concat_mux(
+        playlist_path=pl,
+        audio_path=audio,
+        output_path=out,
+        audio_transcode=False,
+        threads=4,
+        duration_sec=3600.0,
+    )
+    assert "-f" in cmd and cmd[cmd.index("-f") + 1] == "concat"
+    assert "-safe" in cmd and cmd[cmd.index("-safe") + 1] == "0"
+    assert "-i" in cmd and cmd[cmd.index("-i") + 1] == str(pl)
+    assert cmd[cmd.index("-i", cmd.index("-i") + 1) + 1] == str(audio)
+    assert "-c:v" in cmd and cmd[cmd.index("-c:v") + 1] == "copy"
+    assert "-c:a" in cmd and cmd[cmd.index("-c:a") + 1] == "copy"
+    assert "-t" in cmd and cmd[cmd.index("-t") + 1] == "3600.000"
+    assert "-threads" in cmd and cmd[cmd.index("-threads") + 1] == "4"
+    assert "-movflags" in cmd and cmd[cmd.index("-movflags") + 1] == "+faststart"
+
+    # Audio transcode = True
+    cmd_trans = builder.build_randomized_concat_mux(
+        playlist_path=pl,
+        audio_path=audio,
+        output_path=out,
+        audio_transcode=True,
+        duration_sec=180.0,
+    )
+    assert "-c:a" in cmd_trans and cmd_trans[cmd_trans.index("-c:a") + 1] == "aac"
+    assert "-b:a" in cmd_trans and cmd_trans[cmd_trans.index("-b:a") + 1] == "192k"
+    assert "-t" in cmd_trans and cmd_trans[cmd_trans.index("-t") + 1] == "180.000"
+
+

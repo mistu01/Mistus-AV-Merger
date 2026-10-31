@@ -844,20 +844,24 @@ def _execute_job(job: RenderJob):
 
             # Sub-case B: Fulltime overlay or general loop (the standard case)
             else:
-                from mistus_av_merger.core.ffmpeg_builder import compute_randomized_loop_params
+                from mistus_av_merger.core.ffmpeg_builder import (
+                    generate_random_loop_playlist,
+                    slice_loop_variations,
+                )
 
-                if overlay_animation in ("bounce", "vcd", "animated"):
-                    loop_dur = min(audio_dur, 20.0)
-                    start_time = 0.0
-                else:
-                    start_time, loop_dur = compute_randomized_loop_params(video_dur, audio_dur)
+                # Base clip duration: up to 30-35s from source video for Step 1 pre-render
+                base_dur = min(video_dur, 35.0) if video_dur > 0 else 25.0
+                if audio_dur < base_dur:
+                    base_dur = audio_dur
 
-                temp_loop = temp_dir / f"filtered_loop_{job.job_id}.mp4"
+                temp_base = temp_dir / f"filtered_base_{job.job_id}.mp4"
+                playlist_file = temp_dir / f"loop_playlist_{job.job_id}.txt"
+                created_slices: List[Path] = []
 
-                def _build_loop_cmd(enc: str) -> List[str]:
+                def _build_base_cmd(enc: str) -> List[str]:
                     return ffmpeg_builder.build_filtered_loop_clip(
                         video_path=video,
-                        output_path=temp_loop,
+                        output_path=temp_base,
                         encoder=enc,
                         resolution=str(opts.get("resolution") or "original"),
                         filtergraph=filtergraph,
@@ -868,20 +872,14 @@ def _execute_job(job: RenderJob):
                         overlay_path=Path(str(opts.get("overlayPath"))) if opts.get("overlayPath") else None,
                         overlay_opacity=float(opts.get("overlayOpacity", 0.8)),
                         overlay_animation=overlay_animation,
-                        loop_input=(video_dur < loop_dur),
-                        duration_sec=loop_dur,
-                        start_time_sec=start_time,
+                        loop_input=(video_dur < base_dur),
+                        duration_sec=base_dur,
+                        start_time_sec=0.0,
                         threads=job_threads,
                     )
 
-                if start_time > 0:
-                    job.logs.append(
-                        f"[info] Step 1: Pre-rendering randomized {loop_dur:.1f}s loop clip "
-                        f"(start: {start_time:.1f}s / src: {video_dur:.1f}s) ({encoder})..."
-                    )
-                else:
-                    job.logs.append(f"[info] Step 1: Pre-rendering {loop_dur:.1f}s loop clip ({encoder})...")
-                command = _build_loop_cmd(encoder)
+                job.logs.append(f"[info] Step 1: Pre-rendering {base_dur:.1f}s base loop clip ({encoder})...")
+                command = _build_base_cmd(encoder)
                 job.encoder = encoder
                 _run_render_process(job, command)
                 if not queue_mgr.is_running:
@@ -893,75 +891,86 @@ def _execute_job(job: RenderJob):
                         job.logs.append(f"[warn] {encoder} failed; retrying with {sw}")
                         encoder = sw
                         job.encoder = encoder
-                        command = _build_loop_cmd(encoder)
+                        command = _build_base_cmd(encoder)
                         _run_render_process(job, command)
 
                 if not queue_mgr.is_running:
                     return
 
-                if job.status == "completed" and temp_loop.exists() and queue_mgr.is_running:
-                    job.encoder = "stream-copy"
-                    job.progress = 0.0
-                    job.speed = "-"
-                    job.eta_seconds = 0
-                    job.logs.append(f"[info] Step 2: Stream-copy looping across {audio_dur:.1f}s audio track at 2000x+ speed...")
-                    copy_cmd = ffmpeg_builder.build_stream_copy_loop(
-                        video_path=temp_loop,
-                        audio_path=audio,
-                        output_path=output,
-                        audio_transcode=_needs_audio_transcode(audio, output),
-                        audio_duration_sec=audio_dur,
-                        video_duration_sec=loop_dur,
-                        threads=job_threads,
-                    )
-                    _run_render_process(job, copy_cmd)
-                    try:
-                        temp_loop.unlink(missing_ok=True)
-                    except Exception:
-                        pass
+                try:
+                    if job.status == "completed" and temp_base.exists() and queue_mgr.is_running:
+                        # If audio is longer than base clip, generate randomized multi-loop variations!
+                        if audio_dur > base_dur:
+                            job.logs.append("[info] Generating randomized loop duration slices from base clip...")
+                            slice_entries = slice_loop_variations(
+                                source_video=temp_base,
+                                base_dur=base_dur,
+                                job_id=job.job_id,
+                                temp_dir=temp_dir,
+                                ffmpeg_bin=ffmpeg_builder.ffmpeg_bin,
+                            )
+                            created_slices = [s[0] for s in slice_entries]
+
+                            if slice_entries:
+                                generate_random_loop_playlist(slice_entries, audio_dur, playlist_file)
+                                job.encoder = "stream-copy"
+                                job.progress = 0.0
+                                job.speed = "-"
+                                job.eta_seconds = 0
+                                job.logs.append(
+                                    f"[info] Step 2: Stream-copy concatenating randomized loop variations across {audio_dur:.1f}s audio track at 2000x+ speed..."
+                                )
+                                copy_cmd = ffmpeg_builder.build_randomized_concat_mux(
+                                    playlist_path=playlist_file,
+                                    audio_path=audio,
+                                    output_path=output,
+                                    audio_transcode=_needs_audio_transcode(audio, output),
+                                    threads=job_threads,
+                                    duration_sec=audio_dur,
+                                )
+                                _run_render_process(job, copy_cmd)
+                            else:
+                                # Fallback to standard stream copy loop
+                                copy_cmd = ffmpeg_builder.build_stream_copy_loop(
+                                    video_path=temp_base,
+                                    audio_path=audio,
+                                    output_path=output,
+                                    audio_transcode=_needs_audio_transcode(audio, output),
+                                    audio_duration_sec=audio_dur,
+                                    video_duration_sec=base_dur,
+                                    threads=job_threads,
+                                )
+                                _run_render_process(job, copy_cmd)
+                        else:
+                            # Audio is shorter than or equal to base clip: direct stream-copy mux to audio length
+                            job.encoder = "stream-copy"
+                            job.logs.append(f"[info] Step 2: Stream-copy muxing across {audio_dur:.1f}s audio track...")
+                            copy_cmd = ffmpeg_builder.build_stream_copy_loop(
+                                video_path=temp_base,
+                                audio_path=audio,
+                                output_path=output,
+                                audio_transcode=_needs_audio_transcode(audio, output),
+                                audio_duration_sec=audio_dur,
+                                video_duration_sec=base_dur,
+                                threads=job_threads,
+                            )
+                            _run_render_process(job, copy_cmd)
+                finally:
+                    temp_base.unlink(missing_ok=True)
+                    playlist_file.unlink(missing_ok=True)
+                    for s_path in created_slices:
+                        try:
+                            s_path.unlink(missing_ok=True)
+                        except Exception:
+                            pass
                 return
-
-            def _build_encode_command(encoder: str) -> List[str]:
-                return ffmpeg_builder.build_reencode_render(
-                    video_path=video,
-                    audio_path=audio,
-                    output_path=output,
-                    encoder=encoder,
-                    resolution=str(opts.get("resolution") or "original"),
-                    filtergraph=filtergraph,
-                    night_mode=bool(opts.get("nightModeEnabled")),
-                    night_intensity=float(opts.get("nightIntensity", 0.7)),
-                    noise_static=noise_static,
-                    noise_seed=int(opts.get("noiseSeed") or 1994),
-                    overlay_path=Path(str(opts.get("overlayPath"))) if opts.get("overlayPath") else None,
-                    overlay_opacity=float(opts.get("overlayOpacity", 0.8)),
-                    overlay_timeout=opts.get("overlayTimeout"),
-                    overlay_animation=overlay_animation,
-                    duration_sec=job.duration or None,
-                    threads=job_threads,
-                )
-
-            encoder = str(opts.get("encoder") or _pick_encoder())
-            command = _build_encode_command(encoder)
-            fallbacks = 0
-            while True:
-                if not queue_mgr.is_running:
-                    break
-                job.encoder = encoder
-                _run_render_process(job, command)
-                if job.status == "completed" or not queue_mgr.is_running:
-                    break
-                sw = _sw_fallback_encoder(encoder)
-                if sw is None or fallbacks >= 1 or not queue_mgr.is_running:
-                    break
-                job.logs.append(f"[warn] {encoder} failed; retrying with {sw}")
-                encoder = sw
-                command = _build_encode_command(encoder)
-                fallbacks += 1
         else:
             if not queue_mgr.is_running:
                 return
-            from mistus_av_merger.core.ffmpeg_builder import compute_randomized_loop_params
+            from mistus_av_merger.core.ffmpeg_builder import (
+                generate_random_loop_playlist,
+                slice_loop_variations,
+            )
 
             video_dur = float(opts.get("video_duration_sec") or 0.0)
             if not video_dur and video.exists():
@@ -970,48 +979,65 @@ def _execute_job(job: RenderJob):
             if not audio_dur and audio.exists():
                 audio_dur = _pick_probe_duration(audio) or 0.0
 
-            # If video duration is available and audio is longer than video, slice a randomized loop cut via stream copy
+            # If video duration is available and audio is longer than video, generate randomized multi-loop variations
             if video_dur > 2.0 and audio_dur > video_dur:
                 from mistus_av_merger.config import get_temp_dir
                 temp_dir = get_temp_dir()
                 temp_dir.mkdir(parents=True, exist_ok=True)
-                temp_slice = temp_dir / f"copy_slice_{job.job_id}.mp4"
+                playlist_file = temp_dir / f"copy_playlist_{job.job_id}.txt"
+                created_slices: List[Path] = []
 
-                start_time, loop_dur = compute_randomized_loop_params(video_dur, audio_dur)
+                # Use up to 35s of video as base duration for variations
+                base_dur = min(video_dur, 35.0)
                 job.logs.append(
-                    f"[info] Slicing randomized {loop_dur:.1f}s clip (start: {start_time:.1f}s / src: {video_dur:.1f}s) via stream copy..."
+                    f"[info] Slicing randomized loop variations from {video.name} ({base_dur:.1f}s base) via stream copy..."
                 )
-                slice_cmd = [
-                    ffmpeg_builder.ffmpeg_bin, "-y", "-hide_banner", "-loglevel", "error", "-nostdin",
-                    "-ss", f"{start_time:.3f}",
-                    "-i", str(video),
-                    "-t", f"{loop_dur:.3f}",
-                    "-c", "copy",
-                    "-movflags", "+faststart",
-                    str(temp_slice),
-                ]
-                _run_render_process(job, slice_cmd)
-                if not queue_mgr.is_running or job.status != "completed" or not temp_slice.exists():
-                    try:
-                        temp_slice.unlink(missing_ok=True)
-                    except Exception:
-                        pass
-                    return
-
-                command = ffmpeg_builder.build_stream_copy_loop(
-                    video_path=temp_slice,
-                    audio_path=audio,
-                    output_path=output,
-                    audio_transcode=_needs_audio_transcode(audio, output),
-                    audio_duration_sec=audio_dur,
-                    video_duration_sec=loop_dur,
-                    threads=job_threads,
-                )
-                _run_render_process(job, command)
                 try:
-                    temp_slice.unlink(missing_ok=True)
-                except Exception:
-                    pass
+                    slice_entries = slice_loop_variations(
+                        source_video=video,
+                        base_dur=base_dur,
+                        job_id=job.job_id,
+                        temp_dir=temp_dir,
+                        ffmpeg_bin=ffmpeg_builder.ffmpeg_bin,
+                    )
+                    created_slices = [s[0] for s in slice_entries]
+
+                    if slice_entries:
+                        generate_random_loop_playlist(slice_entries, audio_dur, playlist_file)
+                        job.encoder = "stream-copy"
+                        job.progress = 0.0
+                        job.speed = "-"
+                        job.eta_seconds = 0
+                        job.logs.append(
+                            f"[info] Stream-copy concatenating randomized loop variations across {audio_dur:.1f}s audio track at 2000x+ speed..."
+                        )
+                        copy_cmd = ffmpeg_builder.build_randomized_concat_mux(
+                            playlist_path=playlist_file,
+                            audio_path=audio,
+                            output_path=output,
+                            audio_transcode=_needs_audio_transcode(audio, output),
+                            threads=job_threads,
+                            duration_sec=audio_dur,
+                        )
+                        _run_render_process(job, copy_cmd)
+                    else:
+                        command = ffmpeg_builder.build_stream_copy_loop(
+                            video_path=video,
+                            audio_path=audio,
+                            output_path=output,
+                            audio_transcode=_needs_audio_transcode(audio, output),
+                            audio_duration_sec=audio_dur,
+                            video_duration_sec=video_dur,
+                            threads=job_threads,
+                        )
+                        _run_render_process(job, command)
+                finally:
+                    playlist_file.unlink(missing_ok=True)
+                    for s_path in created_slices:
+                        try:
+                            s_path.unlink(missing_ok=True)
+                        except Exception:
+                            pass
             else:
                 command = ffmpeg_builder.build_stream_copy_loop(
                     video_path=video,
