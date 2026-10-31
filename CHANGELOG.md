@@ -9,8 +9,11 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ## [Unreleased]
 
-### Planned
-- (nothing yet)
+### Improved
+- **Universal Loop Randomization Across All Video Lengths (4s, 15s, 29s, 40s, 60s+)**:
+  - Removed fixed length thresholds: every video clip regardless of whether it is 10s, 29s, 40s, or several minutes long is dynamically randomized.
+  - Generates a varying cut duration (proportional 75% to 94% of the source clip, or 25s–35s for long clips) and a randomized starting timestamp.
+  - Enabled universal stream-copy slicing in pure copy mode for all clips over 2s long, ensuring zero-reencode fast-copy while generating unique video hashes for YouTube content safety.
 
 ---
 

@@ -970,8 +970,8 @@ def _execute_job(job: RenderJob):
             if not audio_dur and audio.exists():
                 audio_dur = _pick_probe_duration(audio) or 0.0
 
-            # If video is 25s or longer and audio is longer than video, slice a randomized loop cut via stream copy
-            if video_dur >= 25.0 and audio_dur > video_dur:
+            # If video duration is available and audio is longer than video, slice a randomized loop cut via stream copy
+            if video_dur > 2.0 and audio_dur > video_dur:
                 from mistus_av_merger.config import get_temp_dir
                 temp_dir = get_temp_dir()
                 temp_dir.mkdir(parents=True, exist_ok=True)

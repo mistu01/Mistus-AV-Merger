@@ -11,41 +11,45 @@ from typing import Dict, List, Optional, Tuple, Union
 
 def compute_randomized_loop_params(video_dur: float, audio_dur: float) -> Tuple[float, float]:
     """
-    Computes a randomized loop duration and start time offset for YouTube content deduplication safety.
+    Computes a randomized loop duration and start time offset for YouTube content deduplication safety,
+    regardless of whether the input clip is 5s, 15s, 29s, 40s, 60s, or longer.
 
-    If video duration is >= 30.0s, picks a random duration between 25.0s and min(30.0, video_dur),
-    along with a randomized start offset within the source clip.
-    If video duration is between 15.0s and 30.0s, picks a random slice of [0.8*dur, dur].
-    Ensures the loop duration never exceeds audio duration.
+    - Randomizes loop duration proportionally (typically 75% to 94% of the video duration,
+      or a varying 25s–35s slice for longer clips so Step 1 pre-render remains fast).
+    - Randomizes the starting point within [0, video_dur - loop_dur] so every video in the
+      queue begins at a different frame and repeats at a different interval.
+    - Ensures loop duration never exceeds audio duration.
 
     Returns (start_time_sec, loop_duration_sec).
     """
     if audio_dur <= 0:
         audio_dur = 60.0
 
-    if video_dur >= 30.0:
-        min_l = 25.0
-        max_l = min(30.0, video_dur)
-        loop_dur = round(random.uniform(min_l, max_l), 2)
-        max_start = max(0.0, video_dur - loop_dur)
-        start_time = round(random.uniform(0.0, max_start), 2) if max_start > 0 else 0.0
-    elif video_dur >= 15.0:
-        min_l = max(10.0, video_dur * 0.8)
-        max_l = video_dur
-        loop_dur = round(random.uniform(min_l, max_l), 2)
-        max_start = max(0.0, video_dur - loop_dur)
-        start_time = round(random.uniform(0.0, max_start), 2) if max_start > 0 else 0.0
-    elif video_dur >= 5.0:
-        min_l = max(5.0, video_dur * 0.8)
-        max_l = video_dur
-        loop_dur = round(random.uniform(min_l, max_l), 2)
-        max_start = max(0.0, video_dur - loop_dur)
-        start_time = round(random.uniform(0.0, max_start), 2) if max_start > 0 else 0.0
-    else:
-        loop_dur = min(audio_dur, 10.0)
-        start_time = 0.0
+    if video_dur <= 0:
+        return 0.0, min(audio_dur, 10.0)
 
-    loop_dur = min(audio_dur, loop_dur)
+    # For long clips (>= 35s, e.g. 40s, 60s, 120s):
+    # Slice a randomized 25s to 35s segment from anywhere in the video
+    if video_dur >= 35.0:
+        loop_dur = round(random.uniform(25.0, min(video_dur, 35.0)), 2)
+    elif video_dur >= 10.0:
+        # For medium clips (10s to 35s, e.g. 20s, 29s, 30s):
+        # Vary the duration between 75% and 94% of the source clip
+        loop_dur = round(video_dur * random.uniform(0.75, 0.94), 2)
+    elif video_dur >= 4.0:
+        # For short clips (4s to 10s):
+        loop_dur = round(video_dur * random.uniform(0.75, 0.92), 2)
+    else:
+        # For very short clips (< 4s):
+        loop_dur = round(max(1.0, video_dur * random.uniform(0.80, 0.98)), 2)
+
+    # Bound loop_dur between 1.0s and audio_dur / video_dur
+    loop_dur = max(1.0, min(audio_dur, min(video_dur, loop_dur)))
+
+    # Randomize starting point within the remaining window of the video
+    max_start = max(0.0, video_dur - loop_dur)
+    start_time = round(random.uniform(0.0, max_start), 2) if max_start > 0.05 else 0.0
+
     return start_time, loop_dur
 
 

@@ -252,20 +252,39 @@ def test_build_filtered_loop_clip():
     assert idx_ss < cmd.index("-i")
 
 
-def test_compute_randomized_loop_params_30s():
+def test_compute_randomized_loop_params_29s():
     from mistus_av_merger.core.ffmpeg_builder import compute_randomized_loop_params
     for _ in range(20):
-        start_t, loop_d = compute_randomized_loop_params(video_dur=30.0, audio_dur=300.0)
-        assert 25.0 <= loop_d <= 30.0
-        assert 0.0 <= start_t <= (30.0 - loop_d + 1e-5)
-        assert start_t + loop_d <= 30.001
+        start_t, loop_d = compute_randomized_loop_params(video_dur=29.0, audio_dur=300.0)
+        assert 20.0 <= loop_d <= 29.0
+        assert 0.0 <= start_t <= (29.0 - loop_d + 1e-5)
+        assert start_t + loop_d <= 29.001
+
+
+def test_compute_randomized_loop_params_40s():
+    from mistus_av_merger.core.ffmpeg_builder import compute_randomized_loop_params
+    for _ in range(20):
+        start_t, loop_d = compute_randomized_loop_params(video_dur=40.0, audio_dur=300.0)
+        assert 25.0 <= loop_d <= 35.0
+        assert 0.0 <= start_t <= (40.0 - loop_d + 1e-5)
+        assert start_t + loop_d <= 40.001
+
+
+def test_compute_randomized_loop_params_any_length():
+    from mistus_av_merger.core.ffmpeg_builder import compute_randomized_loop_params
+    for d in [3.5, 6.0, 14.2, 22.0, 29.0, 40.0, 75.0]:
+        for _ in range(10):
+            start_t, loop_d = compute_randomized_loop_params(video_dur=d, audio_dur=600.0)
+            assert 1.0 <= loop_d <= d
+            assert 0.0 <= start_t
+            assert start_t + loop_d <= d + 1e-3
 
 
 def test_compute_randomized_loop_params_long_video():
     from mistus_av_merger.core.ffmpeg_builder import compute_randomized_loop_params
     for _ in range(20):
         start_t, loop_d = compute_randomized_loop_params(video_dur=120.0, audio_dur=3600.0)
-        assert 25.0 <= loop_d <= 30.0
+        assert 25.0 <= loop_d <= 35.0
         assert 0.0 <= start_t <= (120.0 - loop_d + 1e-5)
         assert start_t + loop_d <= 120.001
 
