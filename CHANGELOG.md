@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ## [Unreleased]
 
+### Planned
+- (nothing yet)
+
+---
+
+## [0.6.34] - 2026-11-07
+
 ### Added
 - **Overlay Image Sizing (At Least 60% Scale)**:
   - Scaled overlay image sizing to at least 60% of video width (`w='rw*0.60':h='-1'`) across all modes, significantly increasing visibility and prominence.
