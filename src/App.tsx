@@ -93,6 +93,7 @@ export default function App() {
       overlayOpacity: 0.8,
       overlayTimeout: 'full',
       overlayAnimation: 'static',
+      overlayScale: 0.60,
       sizeTarget: 'unlimited',
     };
   });

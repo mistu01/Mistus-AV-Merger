@@ -9,8 +9,12 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ## [Unreleased]
 
-### Planned
-- (nothing yet)
+### Added
+- **Overlay Image Sizing (At Least 60% Scale)**:
+  - Scaled overlay image sizing to at least 60% of video width (`w='rw*0.60':h='-1'`) across all modes, significantly increasing visibility and prominence.
+  - Added interactive **Overlay Image Size** slider in Visual Effects Studio allowing adjustment from **60% up to 100%** (strictly enforcing at least 60% width).
+  - Updated real-time canvas monitor simulation and compiled filtergraph preview to accurately reflect the selected overlay scale.
+  - Clamped all backend filtergraph builders (`build_filtered_loop_clip` and `build_reencode_render`) to enforce at least 60% minimum scale.
 
 ---
 

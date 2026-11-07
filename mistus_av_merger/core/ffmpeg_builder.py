@@ -482,6 +482,7 @@ class FFmpegCommandBuilder:
         overlay_opacity: float = 0.8,
         overlay_timeout: Optional[Union[int, float, str]] = None,
         overlay_animation: str = "static",
+        overlay_scale: Optional[float] = None,
         crf: int = 21,
         bitrate_kbps: Optional[int] = None,
         audio_bitrate_kbps: Optional[int] = None,
@@ -565,19 +566,29 @@ class FFmpegCommandBuilder:
                         pass
 
             if str(overlay_animation).lower() in ("bounce", "vcd", "animated"):
+                scale_val = max(0.60, min(1.0, float(overlay_scale or 0.60)))
                 vf_string = (
                     f"[0:v]{vf_string}[base];"
-                    f"[2:v][base]scale2ref=w='rw*0.40':h='-1':force_original_aspect_ratio=decrease[ovrl][refw];"
+                    f"[2:v][base]scale2ref=w='rw*{scale_val:.2f}':h='-1':force_original_aspect_ratio=decrease[ovrl][refw];"
                     f"[ovrl]format=rgba,colorchannelmixer=aa={overlay_opacity:.2f}[ovrlA];"
                     f"[refw][ovrlA]overlay=x='(W-w)-abs(mod(0.15*W*t\\,2*(W-w))-(W-w))':y='(H-h)-abs(mod(0.11*H*t\\,2*(H-h))-(H-h))'{enable_clause}[v_out]"
                 )
             else:
-                vf_string = (
-                    f"[0:v]{vf_string}[base];"
-                    f"[2:v][base]scale2ref=w=rw:h=rh[ovrl][refw];"
-                    f"[ovrl]format=rgba,colorchannelmixer=aa={overlay_opacity:.2f}[ovrlA];"
-                    f"[refw][ovrlA]overlay=0:0:format=yuv420{enable_clause}[v_out]"
-                )
+                if overlay_scale is not None and float(overlay_scale) < 0.99:
+                    scale_val = max(0.60, min(1.0, float(overlay_scale)))
+                    vf_string = (
+                        f"[0:v]{vf_string}[base];"
+                        f"[2:v][base]scale2ref=w='rw*{scale_val:.2f}':h='-1':force_original_aspect_ratio=decrease[ovrl][refw];"
+                        f"[ovrl]format=rgba,colorchannelmixer=aa={overlay_opacity:.2f}[ovrlA];"
+                        f"[refw][ovrlA]overlay=(W-w)/2:(H-h)/2:format=yuv420{enable_clause}[v_out]"
+                    )
+                else:
+                    vf_string = (
+                        f"[0:v]{vf_string}[base];"
+                        f"[2:v][base]scale2ref=w=rw:h=rh[ovrl][refw];"
+                        f"[ovrl]format=rgba,colorchannelmixer=aa={overlay_opacity:.2f}[ovrlA];"
+                        f"[refw][ovrlA]overlay=0:0:format=yuv420{enable_clause}[v_out]"
+                    )
             cmd.extend(["-filter_complex", vf_string, "-map", "[v_out]"])
         else:
             cmd.extend(["-vf", vf_string, "-map", "0:v:0"])
@@ -615,6 +626,7 @@ class FFmpegCommandBuilder:
         overlay_path: Optional[Path] = None,
         overlay_opacity: float = 0.8,
         overlay_animation: str = "static",
+        overlay_scale: Optional[float] = None,
         loop_input: bool = False,
         crf: int = 21,
         bitrate_kbps: Optional[int] = None,
@@ -673,19 +685,29 @@ class FFmpegCommandBuilder:
 
         if overlay_p and overlay_p.exists() and overlay_p.is_file():
             if str(overlay_animation).lower() in ("bounce", "vcd", "animated"):
+                scale_val = max(0.60, min(1.0, float(overlay_scale or 0.60)))
                 vf_string = (
                     f"[0:v]{vf_string}[base];"
-                    f"[1:v][base]scale2ref=w='rw*0.40':h='-1':force_original_aspect_ratio=decrease[ovrl][refw];"
+                    f"[1:v][base]scale2ref=w='rw*{scale_val:.2f}':h='-1':force_original_aspect_ratio=decrease[ovrl][refw];"
                     f"[ovrl]format=rgba,colorchannelmixer=aa={overlay_opacity:.2f}[ovrlA];"
                     f"[refw][ovrlA]overlay=x='(W-w)-abs(mod(0.15*W*t\\,2*(W-w))-(W-w))':y='(H-h)-abs(mod(0.11*H*t\\,2*(H-h))-(H-h))'[v_out]"
                 )
             else:
-                vf_string = (
-                    f"[0:v]{vf_string}[base];"
-                    f"[1:v][base]scale2ref=w=rw:h=rh[ovrl][refw];"
-                    f"[ovrl]format=rgba,colorchannelmixer=aa={overlay_opacity:.2f}[ovrlA];"
-                    f"[refw][ovrlA]overlay=0:0:format=yuv420[v_out]"
-                )
+                if overlay_scale is not None and float(overlay_scale) < 0.99:
+                    scale_val = max(0.60, min(1.0, float(overlay_scale)))
+                    vf_string = (
+                        f"[0:v]{vf_string}[base];"
+                        f"[1:v][base]scale2ref=w='rw*{scale_val:.2f}':h='-1':force_original_aspect_ratio=decrease[ovrl][refw];"
+                        f"[ovrl]format=rgba,colorchannelmixer=aa={overlay_opacity:.2f}[ovrlA];"
+                        f"[refw][ovrlA]overlay=(W-w)/2:(H-h)/2:format=yuv420[v_out]"
+                    )
+                else:
+                    vf_string = (
+                        f"[0:v]{vf_string}[base];"
+                        f"[1:v][base]scale2ref=w=rw:h=rh[ovrl][refw];"
+                        f"[ovrl]format=rgba,colorchannelmixer=aa={overlay_opacity:.2f}[ovrlA];"
+                        f"[refw][ovrlA]overlay=0:0:format=yuv420[v_out]"
+                    )
             cmd.extend(["-filter_complex", vf_string, "-map", "[v_out]"])
         else:
             cmd.extend(["-vf", vf_string, "-map", "0:v:0"])

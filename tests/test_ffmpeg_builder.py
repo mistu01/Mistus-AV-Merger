@@ -331,9 +331,41 @@ def test_build_reencode_render_bouncing_vcd_logo(tmp_path):
     )
     idx_fc = cmd.index("-filter_complex")
     graph = cmd[idx_fc + 1]
-    assert "scale2ref=w='rw*0.40':h='-1'" in graph
+    assert "scale2ref=w='rw*0.60':h='-1'" in graph
     assert "overlay=x='(W-w)-abs(mod(0.15*W*t" in graph
     assert ":enable='lte(t,60.00)'" in graph
+
+
+def test_build_reencode_render_overlay_scale(tmp_path):
+    image = tmp_path / "logo.png"
+    image.write_bytes(b"\x89PNG\r\n\x1a\nstub")
+    builder = FFmpegCommandBuilder(ffmpeg_bin="ffmpeg")
+
+    # Custom scale 0.75
+    cmd_75 = builder.build_reencode_render(
+        video_path=Path("/media/clip.mp4"),
+        audio_path=Path("/media/song.mp3"),
+        output_path=Path("/renders/output.mp4"),
+        encoder="libx264",
+        overlay_path=image,
+        overlay_animation="bounce",
+        overlay_scale=0.75,
+    )
+    graph_75 = cmd_75[cmd_75.index("-filter_complex") + 1]
+    assert "scale2ref=w='rw*0.75':h='-1'" in graph_75
+
+    # Clamp: requested 0.30 should be clamped to at least 0.60
+    cmd_clamped = builder.build_reencode_render(
+        video_path=Path("/media/clip.mp4"),
+        audio_path=Path("/media/song.mp3"),
+        output_path=Path("/renders/output.mp4"),
+        encoder="libx264",
+        overlay_path=image,
+        overlay_animation="bounce",
+        overlay_scale=0.30,
+    )
+    graph_clamped = cmd_clamped[cmd_clamped.index("-filter_complex") + 1]
+    assert "scale2ref=w='rw*0.60':h='-1'" in graph_clamped
 
 
 def test_build_concat_and_mux_audio():

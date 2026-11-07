@@ -59,6 +59,7 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
   const overlayOpacity = renderOptions.overlayOpacity ?? 0.8;
   const overlayTimeout = renderOptions.overlayTimeout ?? 'full';
   const overlayAnimation = renderOptions.overlayAnimation || 'static';
+  const overlayScale = Math.max(0.60, renderOptions.overlayScale ?? 0.60);
 
   // Local grain slider for canvas visual feedback
   const [noiseGrain, setNoiseGrain] = useState<number>(20);
@@ -244,9 +245,10 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
         ctx.globalAlpha = overlayOpacity;
 
         if (overlayAnimation === 'bounce') {
-          // Bouncing VCD / DVD screensaver diagonal motion (40% width)
-          const logoW = Math.max(140, Math.floor(w * 0.40));
-          const logoH = Math.max(70, Math.floor(h * 0.35));
+          // Bouncing VCD / DVD screensaver diagonal motion (at least 60% width)
+          const scale = Math.max(0.60, overlayScale ?? 0.60);
+          const logoW = Math.max(180, Math.floor(w * scale));
+          const logoH = Math.max(80, Math.floor(h * (scale * 0.65)));
           const boundX = w - logoW;
           const boundY = h - logoH;
           const posX = boundX > 0 ? (boundX - Math.abs(((frame * 2.8) % (2 * boundX)) - boundX)) : 0;
@@ -307,7 +309,7 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [nightMode, nightIntensity, activePreset, noiseGrain, staticBursts, overlayEnabled, overlayOpacity, overlayTimeout, overlayAnimation, singleOverlayName, bulkOverlayFolderName]);
+  }, [nightMode, nightIntensity, activePreset, noiseGrain, staticBursts, overlayEnabled, overlayOpacity, overlayTimeout, overlayAnimation, overlayScale, singleOverlayName, bulkOverlayFolderName]);
 
   const handleResetAll = () => {
     setRenderOptions({
@@ -322,6 +324,7 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
       overlayOpacity: 0.8,
       overlayTimeout: 'full',
       overlayAnimation: 'static',
+      overlayScale: 0.60,
       overlayPath: undefined,
       overlayFolder: undefined,
     });
@@ -378,7 +381,7 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
             )}
             {overlayEnabled && (
               <span className="nb-badge nb-badge-pink">
-                Overlay ({overlayAnimation === 'bounce' ? 'Bouncing Logo' : 'Full Frame'}, {singleOverlayName ? 'Single' : bulkOverlayFolderName ? 'Bulk' : 'Active'}, {Math.round(overlayOpacity * 100)}%, {overlayTimeout === 'full' ? 'Fulltime' : `${overlayTimeout}s`})
+                Overlay ({overlayAnimation === 'bounce' ? 'Bouncing Logo' : 'Full Frame'}, {Math.round(overlayScale * 100)}% size, {singleOverlayName ? 'Single' : bulkOverlayFolderName ? 'Bulk' : 'Active'}, {Math.round(overlayOpacity * 100)}%, {overlayTimeout === 'full' ? 'Fulltime' : `${overlayTimeout}s`})
               </span>
             )}
           </div>
@@ -441,8 +444,8 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
               {nightMode && `${activePreset.filtergraph ? ',' : ''}eq=brightness=${(-0.05 - 0.45 * nightIntensity).toFixed(2)}:gamma=${(1.0 - 0.65 * nightIntensity).toFixed(2)}`}
               {staticBursts && `${(activePreset.filtergraph || nightMode) ? ',' : ''}noise=alls=65:allf=t+u:all_seed=${noiseSeed}:enable=\'lt(mod(t,4.5),0.35)\',drawbox=y=ih-42:color=white@0.70:width=iw:height=4:t=fill:enable=\'lt(mod(t,4.5),0.35)\'`}
               {overlayEnabled && (overlayAnimation === 'bounce'
-                ? `${(activePreset.filtergraph || nightMode || staticBursts) ? ',' : ''}[1:v]scale=rw*0.40:-1[ov];[0:v][ov]overlay=x='(W-w)-abs(mod(0.15*W*t,2*(W-w))-(W-w))':y='(H-h)-abs(mod(0.11*H*t,2*(H-h))-(H-h))'${overlayTimeout !== 'full' ? `:enable='lte(t,${overlayTimeout})'` : ''}`
-                : `${(activePreset.filtergraph || nightMode || staticBursts) ? ',' : ''}[1:v]scale=iw:ih[ov];[0:v][ov]overlay=0:0${overlayTimeout !== 'full' ? `:enable='lte(t,${overlayTimeout})'` : ''}`)}
+                ? `${(activePreset.filtergraph || nightMode || staticBursts) ? ',' : ''}[1:v]scale=rw*${overlayScale.toFixed(2)}:-1[ov];[0:v][ov]overlay=x='(W-w)-abs(mod(0.15*W*t,2*(W-w))-(W-w))':y='(H-h)-abs(mod(0.11*H*t,2*(H-h))-(H-h))'${overlayTimeout !== 'full' ? `:enable='lte(t,${overlayTimeout})'` : ''}`
+                : `${(activePreset.filtergraph || nightMode || staticBursts) ? ',' : ''}[1:v]scale=${overlayScale < 0.99 ? `rw*${overlayScale.toFixed(2)}:-1` : 'iw:ih'}[ov];[0:v][ov]overlay=${overlayScale < 0.99 ? '(W-w)/2:(H-h)/2' : '0:0'}${overlayTimeout !== 'full' ? `:enable='lte(t,${overlayTimeout})'` : ''}`)}
             </div>
           </div>
 
@@ -608,8 +611,8 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
                   </div>
                 </div>
 
-                {/* Opacity & Duration / Timeout */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t-[2px] border-black/10">
+                {/* Opacity, Image Size & Duration / Timeout */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2 border-t-[2px] border-black/10">
                   <div className="space-y-1.5">
                     <div className="flex justify-between text-xs font-bold">
                       <span className="nb-label">Overlay Opacity</span>
@@ -627,6 +630,25 @@ export const VisualEffectsStudio: React.FC<VisualEffectsStudioProps> = ({
                       className="nb-range w-full"
                     />
                     <p className="nb-sub">Blend transparency level.</p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-xs font-bold">
+                      <span className="nb-label">Overlay Image Size</span>
+                      <span className="font-mono border-2 border-black bg-cyan-300 px-1">
+                        {Math.round(overlayScale * 100)}%
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="60"
+                      max="100"
+                      step="5"
+                      value={Math.round(overlayScale * 100)}
+                      onChange={e => setRenderOptions(prev => ({ ...prev, overlayScale: Math.max(0.60, parseInt(e.target.value, 10) / 100) }))}
+                      className="nb-range w-full"
+                    />
+                    <p className="nb-sub">Display scale (at least 60% width).</p>
                   </div>
 
                   <div className="space-y-1.5">

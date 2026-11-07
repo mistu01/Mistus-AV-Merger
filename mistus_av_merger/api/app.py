@@ -690,6 +690,7 @@ def _execute_job(job: RenderJob):
 
             encoder = str(opts.get("encoder") or _pick_encoder())
             overlay_animation = str(opts.get("overlayAnimation") or "static")
+            overlay_scale = float(opts["overlayScale"]) if opts.get("overlayScale") is not None else None
 
             overlay_timeout = opts.get("overlayTimeout")
             t_overlay: Optional[float] = None
@@ -739,6 +740,7 @@ def _execute_job(job: RenderJob):
                     overlay_path=Path(str(opts.get("overlayPath"))) if opts.get("overlayPath") else None,
                     overlay_opacity=float(opts.get("overlayOpacity", 0.8)),
                     overlay_animation=overlay_animation,
+                    overlay_scale=overlay_scale,
                     loop_input=(video_dur < t_overlay),
                     duration_sec=t_overlay,
                     threads=job_threads,
@@ -767,6 +769,7 @@ def _execute_job(job: RenderJob):
                             overlay_path=Path(str(opts.get("overlayPath"))) if opts.get("overlayPath") else None,
                             overlay_opacity=float(opts.get("overlayOpacity", 0.8)),
                             overlay_animation=overlay_animation,
+                            overlay_scale=overlay_scale,
                             loop_input=(video_dur < t_overlay),
                             duration_sec=t_overlay,
                             threads=job_threads,
@@ -872,6 +875,7 @@ def _execute_job(job: RenderJob):
                         overlay_path=Path(str(opts.get("overlayPath"))) if opts.get("overlayPath") else None,
                         overlay_opacity=float(opts.get("overlayOpacity", 0.8)),
                         overlay_animation=overlay_animation,
+                        overlay_scale=overlay_scale,
                         loop_input=(video_dur < base_dur),
                         duration_sec=base_dur,
                         start_time_sec=0.0,

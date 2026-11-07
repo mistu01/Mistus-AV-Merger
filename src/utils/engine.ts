@@ -47,6 +47,7 @@ export interface RenderOptions {
   overlayOpacity?: number;
   overlayTimeout?: number | 'full';
   overlayAnimation?: 'static' | 'bounce';
+  overlayScale?: number; // 0.60 to 1.0 (min 0.60)
   encoderChoice?: string;
   crf?: number;
   sizeTarget?: 'small' | 'balanced' | 'high' | 'unlimited';
